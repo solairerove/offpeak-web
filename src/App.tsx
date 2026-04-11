@@ -1,6 +1,5 @@
-import { useState, useMemo } from 'react';
-import hongKongData from './data/hong-kong.json';
-import daNangData from './data/da-nang.json';
+import { useState, useMemo, useEffect } from 'react';
+import { fetchCities, fetchCity } from './api';
 import { computeMonthlyIndex } from './lib/scoring';
 import CitySelector from './components/CitySelector';
 import YearRangeSelector from './components/YearRangeSelector';
@@ -8,16 +7,35 @@ import Heatmap from './components/Heatmap';
 import MonthDetail from './components/MonthDetail';
 import type { CityData } from './types';
 
-const ALL_CITIES = [hongKongData, daNangData] as CityData[];
-
 export default function App() {
-  const [selectedCitySlug, setSelectedCitySlug] = useState('hong-kong');
-  const [selectedYears, setSelectedYears] = useState<number[]>([2018, 2019, 2023, 2024]);
+  const [cities, setCities] = useState<CityData[]>([]);
+  const [selectedCitySlug, setSelectedCitySlug] = useState<string>('');
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const city = ALL_CITIES.find(c => c.slug === selectedCitySlug)!;
+  useEffect(() => {
+    async function init() {
+      try {
+        const slugs = await fetchCities();
+        const allCities = await Promise.all(slugs.map(fetchCity));
+        setCities(allCities);
+        setSelectedCitySlug(allCities[0].slug);
+        setSelectedYears(allCities[0].arrivals.years);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    }
+    init();
+  }, []);
+
+  const city = cities.find(c => c.slug === selectedCitySlug);
 
   const cityWithDynamicArrivals = useMemo(() => {
+    if (!city) return null;
     const monthly_index = computeMonthlyIndex(city.arrivals.data, selectedYears);
     return { ...city, arrivals: { ...city.arrivals, monthly_index } };
   }, [city, selectedYears]);
@@ -25,20 +43,35 @@ export default function App() {
   function handleCityChange(slug: string) {
     setSelectedCitySlug(slug);
     setSelectedMonth(null);
-    const newCity = ALL_CITIES.find(c => c.slug === slug)!;
+    const newCity = cities.find(c => c.slug === slug)!;
     setSelectedYears(newCity.arrivals.years);
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center">
+        <p className="text-gray-500 text-sm">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error || !city || !cityWithDynamicArrivals) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center">
+        <p className="text-red-400 text-sm">{error ?? 'Something went wrong'}</p>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Header */}
         <header className="mb-8">
           <h1 className="text-xl font-bold text-white tracking-tight mb-1">Travel Tracker</h1>
           <p className="text-xs text-gray-500 mb-5">When to visit — weather, crowds, holidays at a glance</p>
           <div className="flex flex-wrap items-center gap-4">
             <CitySelector
-              cities={ALL_CITIES}
+              cities={cities}
               selected={selectedCitySlug}
               onSelect={handleCityChange}
             />
@@ -50,7 +83,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* Body */}
         <div className="flex gap-6 items-start">
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 mb-4">
