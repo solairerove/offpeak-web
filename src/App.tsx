@@ -11,6 +11,7 @@ import CitySelector from './components/CitySelector';
 import YearRangeSelector from './components/YearRangeSelector';
 import PlanningYearSelector from './components/PlanningYearSelector';
 import Heatmap from './components/Heatmap';
+import MobileMonthList from './components/MobileMonthList';
 import MonthDetail from './components/MonthDetail';
 import type { CityData } from './types';
 
@@ -156,16 +157,26 @@ export default function App() {
 
       {/* ─── Sticky nav ──────────────────────────────────────── */}
       <nav className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80">
-        <div className="max-w-6xl mx-auto px-4 h-12 flex items-center gap-3">
-          <span className="text-base font-black tracking-tighter text-white shrink-0">offpeak</span>
-          <span className="text-[9px] text-teal-600 border border-teal-900/80 px-1.5 py-0.5 rounded-full font-medium tracking-widest uppercase shrink-0">
-            beta
-          </span>
-          <div className="w-px h-4 bg-slate-800 shrink-0" />
-          <CitySelector cities={cities} selected={selectedCitySlug} onSelect={handleCityChange} />
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <div className="max-w-6xl mx-auto px-4">
+          {/* Row 1: logo + city selector + (desktop) year controls */}
+          <div className="h-12 flex items-center gap-3">
+            <span className="text-base font-black tracking-tighter text-white shrink-0">offpeak</span>
+            <span className="text-[9px] text-teal-600 border border-teal-900/80 px-1.5 py-0.5 rounded-full font-medium tracking-widest uppercase shrink-0">
+              beta
+            </span>
+            <div className="w-px h-4 bg-slate-800 shrink-0" />
+            <CitySelector cities={cities} selected={selectedCitySlug} onSelect={handleCityChange} />
+            {/* Desktop only — year selectors stay on the same row */}
+            <div className="ml-auto hidden lg:flex items-center gap-3">
+              <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
+              <div className="w-px h-4 bg-slate-800 shrink-0" />
+              <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
+            </div>
+          </div>
+          {/* Row 2: mobile only — year selectors on their own scrollable row */}
+          <div className="lg:hidden border-t border-slate-800/40 h-10 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
-            <div className="w-px h-4 bg-slate-800 shrink-0 hidden sm:block" />
+            <div className="w-px h-4 bg-slate-800 shrink-0" />
             <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
           </div>
         </div>
@@ -181,22 +192,22 @@ export default function App() {
               {city.city}
             </h2>
           </div>
-          <div className="hidden sm:flex flex-col items-end gap-2 shrink-0 pb-1">
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium">Best</span>
+          <div className="flex flex-col items-end gap-1.5 sm:gap-2 shrink-0 pb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium hidden sm:block">Best</span>
               <div className="flex gap-1">
                 {monthSummary.best.map(m => (
-                  <span key={m} className="text-[10px] font-bold text-teal-400 bg-teal-950/60 border border-teal-800/40 px-2 py-0.5 rounded">
+                  <span key={m} className="text-[10px] font-bold text-teal-400 bg-teal-950/60 border border-teal-800/40 px-1.5 sm:px-2 py-0.5 rounded">
                     {m}
                   </span>
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium">Skip</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium hidden sm:block">Skip</span>
               <div className="flex gap-1">
                 {monthSummary.avoid.map(m => (
-                  <span key={m} className="text-[10px] font-bold text-rose-400 bg-rose-950/60 border border-rose-800/40 px-2 py-0.5 rounded">
+                  <span key={m} className="text-[10px] font-bold text-rose-400 bg-rose-950/60 border border-rose-800/40 px-1.5 sm:px-2 py-0.5 rounded">
                     {m}
                   </span>
                 ))}
@@ -205,13 +216,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* ─── Heatmap ─────────────────────────────────────────── */}
-        <Heatmap
-          city={cityWithDynamicArrivals}
-          planningYear={planningYear}
-          selectedMonth={selectedMonth}
-          onSelectMonth={handleSelectMonth}
-        />
+        {/* ─── Desktop: heatmap ────────────────────────────────── */}
+        <div className="hidden lg:block">
+          <Heatmap
+            city={cityWithDynamicArrivals}
+            planningYear={planningYear}
+            selectedMonth={selectedMonth}
+            onSelectMonth={handleSelectMonth}
+          />
+        </div>
+
+        {/* ─── Mobile: month cards ─────────────────────────────── */}
+        <div className="lg:hidden">
+          <MobileMonthList
+            city={cityWithDynamicArrivals}
+            planningYear={planningYear}
+            selectedMonth={selectedMonth}
+            onSelectMonth={handleSelectMonth}
+          />
+        </div>
 
         {/* ─── Desktop: full-width detail panel ────────────────── */}
         {selectedMonth !== null && (
