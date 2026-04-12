@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { fetchCities, fetchCity } from './api';
 import {
   computeMonthlyIndex,
@@ -112,9 +112,9 @@ export default function App() {
     setSelectedYears(newCity.arrivals.years);
   }
 
-  function handleSelectMonth(m: number) {
+  const handleSelectMonth = useCallback((m: number) => {
     setSelectedMonth(prev => prev === m ? null : m);
-  }
+  }, []);
 
   // ── Loading / error states ───────────────────────────────────
   if (loading) {

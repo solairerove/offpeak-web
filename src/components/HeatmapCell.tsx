@@ -1,17 +1,19 @@
+import { memo } from 'react';
 import { getTextColor } from '../lib/colors';
 
 interface Props {
   value: string | number;
   bgColor: string;
+  month: number;
   isSelected: boolean;
-  onClick: () => void;
+  onSelect: (month: number) => void;
 }
 
-export default function HeatmapCell({ value, bgColor, isSelected, onClick }: Props) {
+const HeatmapCell = memo(function HeatmapCell({ value, bgColor, month, isSelected, onSelect }: Props) {
   const textColor = getTextColor(bgColor);
   return (
     <div
-      onClick={onClick}
+      onClick={() => onSelect(month)}
       className={`
         flex items-center justify-center h-11 text-xs font-semibold cursor-pointer
         transition-all select-none border-2
@@ -22,4 +24,6 @@ export default function HeatmapCell({ value, bgColor, isSelected, onClick }: Pro
       {value}
     </div>
   );
-}
+});
+
+export default HeatmapCell;

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { CityData } from '../types';
 import {
   computeComfortScore,
@@ -61,6 +61,30 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
     return out;
   }, [scores]);
 
+  // Pre-compute every cell's bgColor + displayValue so the render path
+  // only reads from this matrix — no Math.min/max or string formatting per render.
+  // Keyed as cellMatrix[metricIndex][monthIndex].
+  const cellMatrix = useMemo(() => {
+    return METRICS.map(metric =>
+      scores.map((s, si) => {
+        const rawValue = s[metric.key as keyof typeof s] as number;
+        const bgColor = getMetricColor(rawValue, valuesByMetric[metric.key], metric.lowerIsBetter);
+        let displayValue: string;
+        if (metric.key === 'typhoon') {
+          displayValue = TYPHOON_LABEL[city.weather[si]?.typhoon_risk ?? 'none'] ?? '—';
+        } else {
+          displayValue = String(rawValue % 1 === 0 ? rawValue : rawValue.toFixed(1));
+        }
+        return { month: s.month, bgColor, displayValue };
+      })
+    );
+  }, [scores, valuesByMetric, city.weather]);
+
+  // Stable callback so React.memo on HeatmapCell can skip re-renders.
+  const handleCellSelect = useCallback((month: number) => {
+    onSelectMonth(month);
+  }, [onSelectMonth]);
+
   return (
     <div className="border border-slate-800/60 rounded-xl bg-slate-900/30 overflow-hidden">
     <div className="overflow-x-auto p-4 sm:p-5">
@@ -96,7 +120,7 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
         </div>
 
         {/* Metric rows */}
-        {METRICS.map(metric => (
+        {METRICS.map((metric, mi) => (
           <div key={metric.key} className="grid grid-cols-[100px_repeat(12,1fr)] mb-px">
             <div className="flex flex-col justify-center pr-3">
               <span className={`text-xs font-medium ${metric.key === 'overall' ? 'text-white font-semibold' : 'text-slate-500'}`}>
@@ -104,28 +128,16 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
               </span>
               <span className="text-[10px] text-slate-700">{metric.hint}</span>
             </div>
-            {scores.map(s => {
-              const rawValue = s[metric.key as keyof typeof s] as number;
-              const bg = getMetricColor(rawValue, valuesByMetric[metric.key], metric.lowerIsBetter);
-
-              let displayValue: string;
-              if (metric.key === 'typhoon') {
-                const w = city.weather.find(w => w.month === s.month);
-                displayValue = TYPHOON_LABEL[w?.typhoon_risk ?? 'none'] ?? '—';
-              } else {
-                displayValue = String(rawValue % 1 === 0 ? rawValue : rawValue.toFixed(1));
-              }
-
-              return (
-                <HeatmapCell
-                  key={s.month}
-                  value={displayValue}
-                  bgColor={bg}
-                  isSelected={selectedMonth === s.month}
-                  onClick={() => onSelectMonth(s.month)}
-                />
-              );
-            })}
+            {cellMatrix[mi].map(cell => (
+              <HeatmapCell
+                key={cell.month}
+                month={cell.month}
+                value={cell.displayValue}
+                bgColor={cell.bgColor}
+                isSelected={selectedMonth === cell.month}
+                onSelect={handleCellSelect}
+              />
+            ))}
           </div>
         ))}
 
