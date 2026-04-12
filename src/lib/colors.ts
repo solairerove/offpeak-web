@@ -1,8 +1,8 @@
-// RdWtBu diverging palette (color-blind safe)
-// t=0 → blue (good)   t=0.5 → white (neutral)   t=1 → red (bad)
-const BLUE:  [number, number, number] = [69,  117, 180];
+// TealWtRose diverging palette
+// t=0 → teal (good)   t=0.5 → white (neutral)   t=1 → rose (bad)
+const BLUE:  [number, number, number] = [20,  184, 166]; // teal-500
 const WHITE: [number, number, number] = [247, 247, 247];
-const RED:   [number, number, number] = [215,  48,  39];
+const RED:   [number, number, number] = [244,  63,  94]; // rose-500
 
 function lerp(a: number, b: number, s: number): number {
   return Math.round(a + (b - a) * s);

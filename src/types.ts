@@ -27,14 +27,22 @@ export interface ArrivalsData {
   monthly_index: MonthlyIndex[];
 }
 
+export interface HolidayOccurrence {
+  year: number;
+  date_start: string;  // "YYYY-MM-DD"
+  date_end: string;    // "YYYY-MM-DD"; may be year+1 for Dec→Jan events
+  month_start: number;
+  month_end: number;
+}
+
 export interface Holiday {
+  id: string;
   name: string;
-  typical_month_start: number;
-  typical_month_end: number;
-  crowd_impact: 'extreme' | 'very_high' | 'high' | 'moderate' | 'low';
+  crowd_impact: 'extreme' | 'very_high' | 'high' | 'moderate' | 'low' | 'none';
   price_impact: 'high' | 'moderate' | 'low' | 'none';
   closure_impact: 'significant' | 'minimal' | 'none';
   notes: string;
+  occurrences: HolidayOccurrence[];
 }
 
 export interface Note {
