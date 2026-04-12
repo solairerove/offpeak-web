@@ -63,32 +63,65 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center">
-        <p className="text-gray-500 text-sm">Loading...</p>
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-3xl font-black tracking-tighter text-white mb-3">offpeak</div>
+          <div className="flex gap-1 justify-center">
+            {[0, 1, 2].map(i => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-gray-700 animate-pulse"
+                style={{ animationDelay: `${i * 150}ms` }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error || !city || !cityWithDynamicArrivals) {
     return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center">
-        <p className="text-red-400 text-sm">{error ?? 'Something went wrong'}</p>
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-3xl font-black tracking-tighter text-white mb-3">offpeak</div>
+          <p className="text-red-400 text-sm">{error ?? 'Something went wrong'}</p>
+        </div>
       </div>
     );
   }
 
+  const sharedMonthDetailProps = {
+    city: cityWithDynamicArrivals,
+    month: selectedMonth!,
+    activeYears: selectedYears,
+    planningYear,
+    onClose: () => setSelectedMonth(null),
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="max-w-6xl mx-auto px-4 pt-8 pb-16">
+
+        {/* Header */}
         <header className="mb-8">
-          <h1 className="text-xl font-bold text-white tracking-tight mb-1">Travel Tracker</h1>
-          <p className="text-xs text-gray-500 mb-5">When to visit — weather, crowds, holidays at a glance</p>
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-baseline gap-3 mb-1">
+            <h1 className="text-3xl font-black tracking-tighter text-white">offpeak</h1>
+            <span className="text-[10px] text-gray-700 border border-gray-800 px-2 py-0.5 rounded-full font-medium tracking-wide uppercase">
+              beta
+            </span>
+          </div>
+          <p className="text-sm text-gray-600 mb-6">
+            Weather, crowds &amp; holidays — find your window
+          </p>
+
+          <div className="flex flex-wrap items-center gap-y-3 gap-x-4">
             <CitySelector
               cities={cities}
               selected={selectedCitySlug}
               onSelect={handleCityChange}
             />
+            <div className="h-4 w-px bg-gray-800 hidden sm:block" />
             <YearRangeSelector
               years={city.arrivals.years}
               selected={selectedYears}
@@ -102,14 +135,9 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex gap-6 items-start">
+        {/* Desktop layout */}
+        <div className="hidden lg:flex gap-6 items-start">
           <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2 mb-4">
-              <h2 className="text-lg font-semibold text-white">{city.city}</h2>
-              <span className="text-xs text-gray-500">
-                Click any month for details
-              </span>
-            </div>
             <Heatmap
               city={cityWithDynamicArrivals}
               planningYear={planningYear}
@@ -117,20 +145,43 @@ export default function App() {
               onSelectMonth={m => setSelectedMonth(prev => prev === m ? null : m)}
             />
           </div>
-
           {selectedMonth !== null && (
-            <div className="w-72 shrink-0">
-              <MonthDetail
-                city={cityWithDynamicArrivals}
-                month={selectedMonth}
-                activeYears={selectedYears}
-                planningYear={planningYear}
-                onClose={() => setSelectedMonth(null)}
-              />
+            <div className="w-80 shrink-0">
+              <div className="bg-gray-900 border border-gray-800/60 rounded-2xl overflow-y-auto max-h-[calc(100vh-10rem)]">
+                <MonthDetail {...sharedMonthDetailProps} />
+              </div>
             </div>
           )}
         </div>
+
+        {/* Mobile layout */}
+        <div className="lg:hidden">
+          <Heatmap
+            city={cityWithDynamicArrivals}
+            planningYear={planningYear}
+            selectedMonth={selectedMonth}
+            onSelectMonth={m => setSelectedMonth(prev => prev === m ? null : m)}
+          />
+        </div>
       </div>
+
+      {/* Mobile bottom sheet */}
+      {selectedMonth !== null && (
+        <div className="lg:hidden">
+          <div
+            className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm"
+            onClick={() => setSelectedMonth(null)}
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-gray-900 rounded-t-2xl border-t border-gray-800/60 max-h-[88vh] flex flex-col">
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-8 h-1 bg-gray-700 rounded-full" />
+            </div>
+            <div className="overflow-y-auto flex-1 pb-safe">
+              <MonthDetail {...sharedMonthDetailProps} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
