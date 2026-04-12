@@ -1,12 +1,20 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { fetchCities, fetchCity } from './api';
-import { computeMonthlyIndex } from './lib/scoring';
+import {
+  computeMonthlyIndex,
+  computeComfortScore,
+  computeOverallScore,
+  getHolidaysForMonth,
+  getWorstHolidayPenalty,
+} from './lib/scoring';
 import CitySelector from './components/CitySelector';
 import YearRangeSelector from './components/YearRangeSelector';
 import PlanningYearSelector from './components/PlanningYearSelector';
 import Heatmap from './components/Heatmap';
 import MonthDetail from './components/MonthDetail';
 import type { CityData } from './types';
+
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export default function App() {
   const [cities, setCities] = useState<CityData[]>([]);
@@ -16,6 +24,7 @@ export default function App() {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function init() {
@@ -40,9 +49,7 @@ export default function App() {
     const yearSet = new Set<number>();
     for (const c of cities) {
       for (const h of c.holidays) {
-        for (const o of h.occurrences) {
-          yearSet.add(o.year);
-        }
+        for (const o of h.occurrences) yearSet.add(o.year);
       }
     }
     return Array.from(yearSet).sort();
@@ -54,6 +61,22 @@ export default function App() {
     return { ...city, arrivals: { ...city.arrivals, monthly_index } };
   }, [city, selectedYears]);
 
+  const monthSummary = useMemo(() => {
+    if (!cityWithDynamicArrivals) return { best: [] as string[], avoid: [] as string[] };
+    const scored = cityWithDynamicArrivals.weather.map(w => {
+      const comfort = computeComfortScore(w.heat_index_c, w.rain_days);
+      const crowdEntry = cityWithDynamicArrivals.arrivals.monthly_index.find(m => m.month === w.month);
+      const crowd = crowdEntry?.normalized ?? 5;
+      const monthHols = getHolidaysForMonth(cityWithDynamicArrivals.holidays, w.month, planningYear);
+      const penalty = getWorstHolidayPenalty(monthHols);
+      const overall = computeOverallScore(comfort, crowd, penalty);
+      return { month: w.month, overall };
+    }).sort((a, b) => b.overall - a.overall);
+    const best = scored.slice(0, 3).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
+    const avoid = scored.slice(-2).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
+    return { best, avoid };
+  }, [cityWithDynamicArrivals, planningYear]);
+
   function handleCityChange(slug: string) {
     setSelectedCitySlug(slug);
     setSelectedMonth(null);
@@ -61,18 +84,23 @@ export default function App() {
     setSelectedYears(newCity.arrivals.years);
   }
 
+  function handleSelectMonth(m: number) {
+    const next = selectedMonth === m ? null : m;
+    setSelectedMonth(next);
+    if (next !== null) {
+      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-3xl font-black tracking-tighter text-white mb-3">offpeak</div>
-          <div className="flex gap-1 justify-center">
+          <div className="text-3xl font-black tracking-tighter text-white mb-4">offpeak</div>
+          <div className="flex gap-1.5 justify-center">
             {[0, 1, 2].map(i => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-gray-700 animate-pulse"
-                style={{ animationDelay: `${i * 150}ms` }}
-              />
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-gray-700 animate-pulse"
+                style={{ animationDelay: `${i * 150}ms` }} />
             ))}
           </div>
         </div>
@@ -91,7 +119,7 @@ export default function App() {
     );
   }
 
-  const sharedMonthDetailProps = {
+  const sharedProps = {
     city: cityWithDynamicArrivals,
     month: selectedMonth!,
     activeYears: selectedYears,
@@ -101,71 +129,70 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="max-w-6xl mx-auto px-4 pt-8 pb-16">
 
-        {/* Header */}
-        <header className="mb-8">
-          <div className="flex items-baseline gap-3 mb-1">
-            <h1 className="text-3xl font-black tracking-tighter text-white">offpeak</h1>
-            <span className="text-[10px] text-gray-700 border border-gray-800 px-2 py-0.5 rounded-full font-medium tracking-wide uppercase">
-              beta
-            </span>
+      {/* ─── Sticky nav ──────────────────────────────────────── */}
+      <nav className="sticky top-0 z-30 bg-gray-950/95 backdrop-blur-md border-b border-gray-900">
+        <div className="max-w-6xl mx-auto px-4 h-12 flex items-center gap-3">
+          <span className="text-base font-black tracking-tighter text-white shrink-0">offpeak</span>
+          <span className="text-[9px] text-gray-700 border border-gray-800 px-1.5 py-0.5 rounded-full font-medium tracking-widest uppercase shrink-0">beta</span>
+          <div className="w-px h-4 bg-gray-800 shrink-0" />
+          <CitySelector cities={cities} selected={selectedCitySlug} onSelect={handleCityChange} />
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
+            <div className="w-px h-4 bg-gray-800 shrink-0 hidden sm:block" />
+            <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
           </div>
-          <p className="text-sm text-gray-600 mb-6">
-            Weather, crowds &amp; holidays — find your window
-          </p>
+        </div>
+      </nav>
 
-          <div className="flex flex-wrap items-center gap-y-3 gap-x-4">
-            <CitySelector
-              cities={cities}
-              selected={selectedCitySlug}
-              onSelect={handleCityChange}
-            />
-            <div className="h-4 w-px bg-gray-800 hidden sm:block" />
-            <YearRangeSelector
-              years={city.arrivals.years}
-              selected={selectedYears}
-              onSelect={setSelectedYears}
-            />
-            <PlanningYearSelector
-              years={availablePlanningYears}
-              selected={planningYear}
-              onSelect={setPlanningYear}
-            />
-          </div>
-        </header>
+      <div className="max-w-6xl mx-auto px-4 pt-10 pb-20">
 
-        {/* Desktop layout */}
-        <div className="hidden lg:flex gap-6 items-start">
-          <div className="flex-1 min-w-0">
-            <Heatmap
-              city={cityWithDynamicArrivals}
-              planningYear={planningYear}
-              selectedMonth={selectedMonth}
-              onSelectMonth={m => setSelectedMonth(prev => prev === m ? null : m)}
-            />
-          </div>
-          {selectedMonth !== null && (
-            <div className="w-80 shrink-0">
-              <div className="bg-gray-900 border border-gray-800/60 rounded-2xl overflow-y-auto max-h-[calc(100vh-10rem)]">
-                <MonthDetail {...sharedMonthDetailProps} />
+        {/* ─── City hero ───────────────────────────────────────── */}
+        <div className="flex items-end justify-between gap-4 mb-10">
+          <h2 className="text-5xl sm:text-6xl font-black tracking-tighter text-white leading-none">
+            {city.city}
+          </h2>
+          <div className="hidden sm:flex flex-col items-end gap-2 shrink-0 pb-1">
+            <div className="flex items-center gap-2.5">
+              <span className="text-[10px] text-gray-700 uppercase tracking-widest font-medium">Best</span>
+              <div className="flex gap-1">
+                {monthSummary.best.map(m => (
+                  <span key={m} className="text-[10px] font-bold text-blue-400 bg-blue-950/50 border border-blue-800/30 px-2 py-0.5 rounded">
+                    {m}
+                  </span>
+                ))}
               </div>
             </div>
-          )}
+            <div className="flex items-center gap-2.5">
+              <span className="text-[10px] text-gray-700 uppercase tracking-widest font-medium">Skip</span>
+              <div className="flex gap-1">
+                {monthSummary.avoid.map(m => (
+                  <span key={m} className="text-[10px] font-bold text-red-400 bg-red-950/50 border border-red-800/30 px-2 py-0.5 rounded">
+                    {m}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Mobile layout */}
-        <div className="lg:hidden">
-          <Heatmap
-            city={cityWithDynamicArrivals}
-            planningYear={planningYear}
-            selectedMonth={selectedMonth}
-            onSelectMonth={m => setSelectedMonth(prev => prev === m ? null : m)}
-          />
-        </div>
+        {/* ─── Heatmap ─────────────────────────────────────────── */}
+        <Heatmap
+          city={cityWithDynamicArrivals}
+          planningYear={planningYear}
+          selectedMonth={selectedMonth}
+          onSelectMonth={handleSelectMonth}
+        />
+
+        {/* ─── Desktop: full-width detail panel ────────────────── */}
+        {selectedMonth !== null && (
+          <div ref={detailRef} className="hidden lg:block mt-8 pt-8 border-t border-gray-800/60">
+            <MonthDetail {...sharedProps} />
+          </div>
+        )}
       </div>
 
-      {/* Mobile bottom sheet */}
+      {/* ─── Mobile: bottom sheet ────────────────────────────── */}
       {selectedMonth !== null && (
         <div className="lg:hidden">
           <div
@@ -177,7 +204,7 @@ export default function App() {
               <div className="w-8 h-1 bg-gray-700 rounded-full" />
             </div>
             <div className="overflow-y-auto flex-1 pb-safe">
-              <MonthDetail {...sharedMonthDetailProps} />
+              <MonthDetail {...sharedProps} />
             </div>
           </div>
         </div>

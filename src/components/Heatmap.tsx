@@ -111,7 +111,9 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
         {METRICS.map(metric => (
           <div key={metric.key} className="grid grid-cols-[100px_repeat(12,1fr)] mb-px">
             <div className="flex flex-col justify-center pr-3">
-              <span className="text-xs font-medium text-gray-400">{metric.label}</span>
+              <span className={`text-xs font-medium ${metric.key === 'overall' ? 'text-white font-semibold' : 'text-gray-500'}`}>
+                {metric.label}
+              </span>
               <span className="text-[10px] text-gray-700">{metric.hint}</span>
             </div>
             {scores.map(s => {

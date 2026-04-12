@@ -8,16 +8,16 @@ interface Props {
 
 export default function CitySelector({ cities, selected, onSelect }: Props) {
   return (
-    <div className="flex gap-1 bg-gray-800 p-1 rounded-lg">
+    <div className="flex gap-0.5">
       {cities.map(c => (
         <button
           key={c.slug}
           onClick={() => onSelect(c.slug)}
           className={`
-            px-4 py-1.5 rounded-md text-sm font-medium transition-all
+            px-3 py-1 rounded-md text-sm font-medium transition-all
             ${selected === c.slug
-              ? 'bg-white text-gray-900'
-              : 'text-gray-400 hover:text-white'
+              ? 'bg-gray-800 text-white'
+              : 'text-gray-500 hover:text-gray-200'
             }
           `}
         >
