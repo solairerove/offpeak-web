@@ -14,10 +14,7 @@ import HolidayBadge from './HolidayBadge';
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const TYPHOON_LABEL: Record<string, string> = {
-  none: '—',
-  low: 'Low',
-  moderate: 'Mod',
-  high: 'High',
+  none: '—', low: 'Low', moderate: 'Mod', high: 'High',
 };
 
 interface MetricRow {
@@ -28,11 +25,11 @@ interface MetricRow {
 }
 
 const METRICS: MetricRow[] = [
-  { key: 'overall',   label: 'Overall',   hint: '/10',   lowerIsBetter: false },
-  { key: 'comfort',   label: 'Comfort',   hint: '/10',   lowerIsBetter: false },
-  { key: 'crowds',    label: 'Crowds',    hint: '/10',   lowerIsBetter: true  },
-  { key: 'rain_days', label: 'Rain days', hint: 'days',  lowerIsBetter: true  },
-  { key: 'typhoon',   label: 'Typhoon',   hint: 'risk',  lowerIsBetter: true  },
+  { key: 'overall',   label: 'Overall',   hint: '/10',  lowerIsBetter: false },
+  { key: 'comfort',   label: 'Comfort',   hint: '/10',  lowerIsBetter: false },
+  { key: 'crowds',    label: 'Crowds',    hint: '/10',  lowerIsBetter: true  },
+  { key: 'rain_days', label: 'Rain days', hint: 'days', lowerIsBetter: true  },
+  { key: 'typhoon',   label: 'Typhoon',   hint: 'risk', lowerIsBetter: true  },
 ];
 
 interface Props {
@@ -65,43 +62,34 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
   }, [scores]);
 
   return (
-    <div className="overflow-x-auto -mx-4 px-4">
-      <div className="min-w-[640px]">
+    <div className="border border-slate-800/60 rounded-xl bg-slate-900/30 overflow-hidden">
+    <div className="overflow-x-auto p-4 sm:p-5">
+      <div className="min-w-[600px]">
 
-        {/* Column headers */}
+        {/* Month headers */}
         <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-1">
           <div />
-          {MONTH_LABELS.map((label, i) => {
-            const isSelected = selectedMonth === i + 1;
-            return (
-              <button
-                key={label}
-                onClick={() => onSelectMonth(i + 1)}
-                className={`
-                  text-xs font-semibold text-center py-1.5 rounded transition-colors
-                  ${isSelected
-                    ? 'text-white'
-                    : 'text-gray-600 hover:text-gray-300'
-                  }
-                `}
-              >
-                {label}
-              </button>
-            );
-          })}
+          {MONTH_LABELS.map((label, i) => (
+            <button
+              key={label}
+              onClick={() => onSelectMonth(i + 1)}
+              className={`
+                text-xs font-semibold text-center py-1.5 rounded transition-colors
+                ${selectedMonth === i + 1 ? 'text-teal-400' : 'text-slate-600 hover:text-slate-300'}
+              `}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* Holiday row */}
         <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-2">
           <div className="flex items-start pt-0.5">
-            <span className="text-[10px] text-gray-700 uppercase tracking-widest font-medium">Holidays</span>
+            <span className="text-[10px] text-slate-700 uppercase tracking-widest font-medium">Holidays</span>
           </div>
           {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-            <div
-              key={month}
-              className="px-0.5 cursor-pointer"
-              onClick={() => onSelectMonth(month)}
-            >
+            <div key={month} className="px-0.5 cursor-pointer" onClick={() => onSelectMonth(month)}>
               <HolidayBadge holidays={getHolidaysForMonth(city.holidays, month, planningYear)} />
             </div>
           ))}
@@ -111,10 +99,10 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
         {METRICS.map(metric => (
           <div key={metric.key} className="grid grid-cols-[100px_repeat(12,1fr)] mb-px">
             <div className="flex flex-col justify-center pr-3">
-              <span className={`text-xs font-medium ${metric.key === 'overall' ? 'text-white font-semibold' : 'text-gray-500'}`}>
+              <span className={`text-xs font-medium ${metric.key === 'overall' ? 'text-white font-semibold' : 'text-slate-500'}`}>
                 {metric.label}
               </span>
-              <span className="text-[10px] text-gray-700">{metric.hint}</span>
+              <span className="text-[10px] text-slate-700">{metric.hint}</span>
             </div>
             {scores.map(s => {
               const rawValue = s[metric.key as keyof typeof s] as number;
@@ -143,16 +131,17 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
 
         {/* Legend */}
         <div className="flex items-center gap-2.5 mt-5 ml-[100px]">
-          <span className="text-[10px] text-gray-700 uppercase tracking-widest">Better</span>
+          <span className="text-[10px] text-slate-700 uppercase tracking-widest">Better</span>
           <div
             className="h-1.5 w-24 rounded-full"
             style={{
-              background: 'linear-gradient(to right, rgb(69,117,180), rgb(247,247,247), rgb(215,48,39))'
+              background: 'linear-gradient(to right, rgb(20,184,166), rgb(247,247,247), rgb(244,63,94))'
             }}
           />
-          <span className="text-[10px] text-gray-700 uppercase tracking-widest">Worse</span>
+          <span className="text-[10px] text-slate-700 uppercase tracking-widest">Worse</span>
         </div>
       </div>
+    </div>
     </div>
   );
 }

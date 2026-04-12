@@ -94,12 +94,12 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <div className="text-3xl font-black tracking-tighter text-white mb-4">offpeak</div>
           <div className="flex gap-1.5 justify-center">
             {[0, 1, 2].map(i => (
-              <div key={i} className="w-1.5 h-1.5 rounded-full bg-gray-700 animate-pulse"
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-700 animate-pulse"
                 style={{ animationDelay: `${i * 150}ms` }} />
             ))}
           </div>
@@ -110,10 +110,10 @@ export default function App() {
 
   if (error || !city || !cityWithDynamicArrivals) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <div className="text-3xl font-black tracking-tighter text-white mb-3">offpeak</div>
-          <p className="text-red-400 text-sm">{error ?? 'Something went wrong'}</p>
+          <p className="text-rose-400 text-sm">{error ?? 'Something went wrong'}</p>
         </div>
       </div>
     );
@@ -128,18 +128,20 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
 
       {/* ─── Sticky nav ──────────────────────────────────────── */}
-      <nav className="sticky top-0 z-30 bg-gray-950/95 backdrop-blur-md border-b border-gray-900">
+      <nav className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80">
         <div className="max-w-6xl mx-auto px-4 h-12 flex items-center gap-3">
           <span className="text-base font-black tracking-tighter text-white shrink-0">offpeak</span>
-          <span className="text-[9px] text-gray-700 border border-gray-800 px-1.5 py-0.5 rounded-full font-medium tracking-widest uppercase shrink-0">beta</span>
-          <div className="w-px h-4 bg-gray-800 shrink-0" />
+          <span className="text-[9px] text-teal-600 border border-teal-900/80 px-1.5 py-0.5 rounded-full font-medium tracking-widest uppercase shrink-0">
+            beta
+          </span>
+          <div className="w-px h-4 bg-slate-800 shrink-0" />
           <CitySelector cities={cities} selected={selectedCitySlug} onSelect={handleCityChange} />
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
-            <div className="w-px h-4 bg-gray-800 shrink-0 hidden sm:block" />
+            <div className="w-px h-4 bg-slate-800 shrink-0 hidden sm:block" />
             <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
           </div>
         </div>
@@ -149,25 +151,28 @@ export default function App() {
 
         {/* ─── City hero ───────────────────────────────────────── */}
         <div className="flex items-end justify-between gap-4 mb-10">
-          <h2 className="text-5xl sm:text-6xl font-black tracking-tighter text-white leading-none">
-            {city.city}
-          </h2>
+          <div className="flex items-stretch gap-4 min-w-0">
+            <div className="w-[3px] rounded-full bg-teal-500 shrink-0 self-stretch" />
+            <h2 className="text-5xl sm:text-6xl font-black tracking-tighter text-white leading-none">
+              {city.city}
+            </h2>
+          </div>
           <div className="hidden sm:flex flex-col items-end gap-2 shrink-0 pb-1">
             <div className="flex items-center gap-2.5">
-              <span className="text-[10px] text-gray-700 uppercase tracking-widest font-medium">Best</span>
+              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium">Best</span>
               <div className="flex gap-1">
                 {monthSummary.best.map(m => (
-                  <span key={m} className="text-[10px] font-bold text-blue-400 bg-blue-950/50 border border-blue-800/30 px-2 py-0.5 rounded">
+                  <span key={m} className="text-[10px] font-bold text-teal-400 bg-teal-950/60 border border-teal-800/40 px-2 py-0.5 rounded">
                     {m}
                   </span>
                 ))}
               </div>
             </div>
             <div className="flex items-center gap-2.5">
-              <span className="text-[10px] text-gray-700 uppercase tracking-widest font-medium">Skip</span>
+              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium">Skip</span>
               <div className="flex gap-1">
                 {monthSummary.avoid.map(m => (
-                  <span key={m} className="text-[10px] font-bold text-red-400 bg-red-950/50 border border-red-800/30 px-2 py-0.5 rounded">
+                  <span key={m} className="text-[10px] font-bold text-rose-400 bg-rose-950/60 border border-rose-800/40 px-2 py-0.5 rounded">
                     {m}
                   </span>
                 ))}
@@ -186,8 +191,10 @@ export default function App() {
 
         {/* ─── Desktop: full-width detail panel ────────────────── */}
         {selectedMonth !== null && (
-          <div ref={detailRef} className="hidden lg:block mt-8 pt-8 border-t border-gray-800/60">
-            <MonthDetail {...sharedProps} />
+          <div ref={detailRef} className="hidden lg:block mt-6">
+            <div className="border border-slate-800/60 rounded-2xl bg-slate-900/30 p-7">
+              <MonthDetail {...sharedProps} />
+            </div>
           </div>
         )}
       </div>
@@ -199,9 +206,9 @@ export default function App() {
             className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm"
             onClick={() => setSelectedMonth(null)}
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 bg-gray-900 rounded-t-2xl border-t border-gray-800/60 max-h-[88vh] flex flex-col">
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900 rounded-t-2xl border-t border-slate-800/60 max-h-[88vh] flex flex-col">
             <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-8 h-1 bg-gray-700 rounded-full" />
+              <div className="w-8 h-1 bg-slate-700 rounded-full" />
             </div>
             <div className="overflow-y-auto flex-1 pb-safe">
               <MonthDetail {...sharedProps} />

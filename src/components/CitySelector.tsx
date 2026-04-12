@@ -16,8 +16,8 @@ export default function CitySelector({ cities, selected, onSelect }: Props) {
           className={`
             px-3 py-1 rounded-md text-sm font-medium transition-all
             ${selected === c.slug
-              ? 'bg-gray-800 text-white'
-              : 'text-gray-500 hover:text-gray-200'
+              ? 'bg-slate-800 text-white'
+              : 'text-slate-500 hover:text-slate-200'
             }
           `}
         >
