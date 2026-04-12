@@ -3,6 +3,7 @@ import { fetchCities, fetchCity } from './api';
 import { computeMonthlyIndex } from './lib/scoring';
 import CitySelector from './components/CitySelector';
 import YearRangeSelector from './components/YearRangeSelector';
+import PlanningYearSelector from './components/PlanningYearSelector';
 import Heatmap from './components/Heatmap';
 import MonthDetail from './components/MonthDetail';
 import type { CityData } from './types';
@@ -11,6 +12,7 @@ export default function App() {
   const [cities, setCities] = useState<CityData[]>([]);
   const [selectedCitySlug, setSelectedCitySlug] = useState<string>('');
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
+  const [planningYear, setPlanningYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,18 @@ export default function App() {
   }, []);
 
   const city = cities.find(c => c.slug === selectedCitySlug);
+
+  const availablePlanningYears = useMemo(() => {
+    const yearSet = new Set<number>();
+    for (const c of cities) {
+      for (const h of c.holidays) {
+        for (const o of h.occurrences) {
+          yearSet.add(o.year);
+        }
+      }
+    }
+    return Array.from(yearSet).sort();
+  }, [cities]);
 
   const cityWithDynamicArrivals = useMemo(() => {
     if (!city) return null;
@@ -80,6 +94,11 @@ export default function App() {
               selected={selectedYears}
               onSelect={setSelectedYears}
             />
+            <PlanningYearSelector
+              years={availablePlanningYears}
+              selected={planningYear}
+              onSelect={setPlanningYear}
+            />
           </div>
         </header>
 
@@ -93,6 +112,7 @@ export default function App() {
             </div>
             <Heatmap
               city={cityWithDynamicArrivals}
+              planningYear={planningYear}
               selectedMonth={selectedMonth}
               onSelectMonth={m => setSelectedMonth(prev => prev === m ? null : m)}
             />
@@ -104,6 +124,7 @@ export default function App() {
                 city={cityWithDynamicArrivals}
                 month={selectedMonth}
                 activeYears={selectedYears}
+                planningYear={planningYear}
                 onClose={() => setSelectedMonth(null)}
               />
             </div>

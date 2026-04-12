@@ -8,7 +8,14 @@ interface Props {
   city: CityData;
   month: number;
   activeYears: number[];
+  planningYear: number;
   onClose: () => void;
+}
+
+function formatDate(iso: string): string {
+  const parts = iso.split('-');
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${monthNames[parseInt(parts[1], 10) - 1]} ${parseInt(parts[2], 10)}`;
 }
 
 const CROWD_LABEL: Record<string, string> = {
@@ -28,7 +35,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   aviation: '✈️',
 };
 
-export default function MonthDetail({ city, month, activeYears, onClose }: Props) {
+export default function MonthDetail({ city, month, activeYears, planningYear, onClose }: Props) {
   const w = city.weather.find(m => m.month === month);
   if (!w) return null;
 
@@ -40,7 +47,7 @@ export default function MonthDetail({ city, month, activeYears, onClose }: Props
     .filter(d => d.month === month && activeYears.includes(d.year))
     .sort((a, b) => a.year - b.year);
 
-  const holidays = getHolidaysForMonth(city.holidays, month);
+  const holidays = getHolidaysForMonth(city.holidays, month, planningYear);
 
   const typhoonLabel: Record<string, string> = {
     none: '—',
@@ -128,19 +135,37 @@ export default function MonthDetail({ city, month, activeYears, onClose }: Props
       {/* Holidays */}
       {holidays.length > 0 && (
         <section className="mb-5">
-          <h3 className="text-xs uppercase tracking-wider text-gray-500 mb-2">Holidays</h3>
+          <h3 className="text-xs uppercase tracking-wider text-gray-500 mb-2">
+            Holidays in {planningYear}
+          </h3>
           <div className="space-y-3">
-            {holidays.map(h => (
-              <div key={h.name} className="border-l-2 border-gray-600 pl-3">
-                <div className="font-medium text-white">{h.name}</div>
-                <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
-                  <div>Crowds: {CROWD_LABEL[h.crowd_impact] ?? h.crowd_impact}</div>
-                  {h.price_impact !== 'none' && <div>Prices: {h.price_impact}</div>}
-                  {h.closure_impact !== 'none' && <div>Closures: {h.closure_impact}</div>}
-                  {h.notes && <div className="italic mt-1 text-gray-500">{h.notes}</div>}
+            {holidays.map(h => {
+              // Find the occurrence(s) for planningYear that overlap this month
+              const occs = h.occurrences.filter(o => {
+                if (o.year !== planningYear) return false;
+                const { month_start: s, month_end: e } = o;
+                if (s <= e) return month >= s && month <= e;
+                return month >= s || month <= e;
+              });
+              return (
+                <div key={h.id} className="border-l-2 border-gray-600 pl-3">
+                  <div className="font-medium text-white">{h.name}</div>
+                  {occs.map(o => (
+                    <div key={o.date_start} className="text-xs text-gray-500 mt-0.5">
+                      {o.date_start === o.date_end
+                        ? formatDate(o.date_start)
+                        : `${formatDate(o.date_start)} – ${formatDate(o.date_end)}`}
+                    </div>
+                  ))}
+                  <div className="text-xs text-gray-400 mt-0.5 space-y-0.5">
+                    <div>Crowds: {CROWD_LABEL[h.crowd_impact] ?? h.crowd_impact}</div>
+                    {h.price_impact !== 'none' && <div>Prices: {h.price_impact}</div>}
+                    {h.closure_impact !== 'none' && <div>Closures: {h.closure_impact}</div>}
+                    {h.notes && <div className="italic mt-1 text-gray-500">{h.notes}</div>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

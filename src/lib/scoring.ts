@@ -46,13 +46,17 @@ export function computeMonthlyIndex(
   }));
 }
 
-export function getHolidaysForMonth(holidays: Holiday[], month: number): Holiday[] {
-  return holidays.filter(h => {
-    const s = h.typical_month_start;
-    const e = h.typical_month_end;
-    if (s <= e) return month >= s && month <= e;
-    return month >= s || month <= e; // wraps Dec→Jan
-  });
+export function getHolidaysForMonth(holidays: Holiday[], month: number, year: number): Holiday[] {
+  // Use filter (not find) so holidays with multiple occurrences in the same year
+  // (e.g. Galungan twice on a 210-day Pawukon cycle) are each checked independently.
+  return holidays.filter(h =>
+    h.occurrences
+      .filter(o => o.year === year)
+      .some(({ month_start: s, month_end: e }) => {
+        if (s <= e) return month >= s && month <= e;
+        return month >= s || month <= e; // Dec→Jan wrap
+      })
+  );
 }
 
 export function getWorstHolidayPenalty(holidays: Holiday[]): number {

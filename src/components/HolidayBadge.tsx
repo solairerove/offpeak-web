@@ -29,7 +29,7 @@ export default function HolidayBadge({ holidays }: Props) {
     <div className="flex flex-col gap-0.5 min-h-6">
       {holidays.map(h => (
         <div
-          key={h.name}
+          key={h.id}
           title={`${h.name} — ${h.notes}`}
           className={`text-[9px] font-bold px-1 rounded truncate leading-4 ${IMPACT_STYLES[h.crowd_impact] ?? 'bg-gray-500 text-white'}`}
         >

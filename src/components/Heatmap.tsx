@@ -37,23 +37,24 @@ const METRICS: MetricRow[] = [
 
 interface Props {
   city: CityData;
+  planningYear: number;
   selectedMonth: number | null;
   onSelectMonth: (month: number) => void;
 }
 
-export default function Heatmap({ city, selectedMonth, onSelectMonth }: Props) {
+export default function Heatmap({ city, planningYear, selectedMonth, onSelectMonth }: Props) {
   const scores = useMemo(() => {
     return city.weather.map(w => {
       const comfort = computeComfortScore(w.heat_index_c, w.rain_days);
       const crowdEntry = city.arrivals.monthly_index.find(m => m.month === w.month);
       const crowd = crowdEntry?.normalized ?? 5;
-      const monthHolidays = getHolidaysForMonth(city.holidays, w.month);
+      const monthHolidays = getHolidaysForMonth(city.holidays, w.month, planningYear);
       const penalty = getWorstHolidayPenalty(monthHolidays);
       const overall = computeOverallScore(comfort, crowd, penalty);
       const typhoon = typhoonRiskToScore(w.typhoon_risk);
       return { month: w.month, overall, comfort, crowds: crowd, rain_days: w.rain_days, typhoon };
     });
-  }, [city]);
+  }, [city, planningYear]);
 
   const valuesByMetric = useMemo(() => {
     const out: Record<string, number[]> = {};
@@ -94,7 +95,7 @@ export default function Heatmap({ city, selectedMonth, onSelectMonth }: Props) {
               className="px-0.5 cursor-pointer"
               onClick={() => onSelectMonth(month)}
             >
-              <HolidayBadge holidays={getHolidaysForMonth(city.holidays, month)} />
+              <HolidayBadge holidays={getHolidaysForMonth(city.holidays, month, planningYear)} />
             </div>
           ))}
         </div>
