@@ -10,8 +10,7 @@ import {
 import { getMetricColor } from '../lib/colors';
 import HeatmapCell from './HeatmapCell';
 import HolidayBadge from './HolidayBadge';
-
-const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+import { MONTH_SHORT } from '../lib/constants';
 
 const TYPHOON_LABEL: Record<string, string> = {
   none: '—', low: 'Low', moderate: 'Mod', high: 'High',
@@ -93,7 +92,7 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
         {/* Month headers */}
         <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-1">
           <div />
-          {MONTH_LABELS.map((label, i) => (
+          {MONTH_SHORT.map((label, i) => (
             <button
               key={label}
               onClick={() => onSelectMonth(i + 1)}

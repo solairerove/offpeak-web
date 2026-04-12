@@ -14,8 +14,7 @@ import Heatmap from './components/Heatmap';
 import MobileMonthList from './components/MobileMonthList';
 import MonthDetail from './components/MonthDetail';
 import type { CityData } from './types';
-
-const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+import { MONTH_SHORT, MONTH_FULL } from './lib/constants';
 
 export default function App() {
   const [cities, setCities] = useState<CityData[]>([]);
@@ -29,11 +28,14 @@ export default function App() {
 
   // ── Data fetching ────────────────────────────────────────────
   useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+
     async function init() {
       try {
-        const slugs = await fetchCities();
+        const slugs = await fetchCities(signal);
         // allSettled: partial failures don't kill the whole app
-        const results = await Promise.allSettled(slugs.map(fetchCity));
+        const results = await Promise.allSettled(slugs.map(s => fetchCity(s, signal)));
         const allCities = results
           .filter((r): r is PromiseFulfilledResult<CityData> => r.status === 'fulfilled')
           .map(r => r.value);
@@ -42,12 +44,14 @@ export default function App() {
         setSelectedCitySlug(allCities[0].slug);
         setSelectedYears(allCities[0].arrivals.years);
       } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
         setError(e instanceof Error ? e.message : 'Failed to load data');
       } finally {
-        setLoading(false);
+        if (!signal.aborted) setLoading(false);
       }
     }
     init();
+    return () => controller.abort();
   }, []);
 
   // ── Escape to close detail ───────────────────────────────────
@@ -119,13 +123,88 @@ export default function App() {
   // ── Loading / error states ───────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-3xl font-black tracking-tighter text-white mb-4">offpeak</div>
-          <div className="flex gap-1.5 justify-center">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-700 animate-pulse"
-                style={{ animationDelay: `${i * 150}ms` }} />
+      <div className="min-h-screen bg-slate-950 text-slate-100 animate-pulse">
+        {/* Nav skeleton */}
+        <nav className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80">
+          <div className="max-w-6xl mx-auto px-4">
+            <div className="h-12 flex items-center gap-3">
+              <div className="w-16 h-4 bg-slate-800 rounded" />
+              <div className="w-px h-4 bg-slate-800 shrink-0" />
+              <div className="flex gap-1.5">
+                {[72, 56, 64, 80].map((w, i) => (
+                  <div key={i} className="h-6 bg-slate-800 rounded-md" style={{ width: w }} />
+                ))}
+              </div>
+              <div className="ml-auto hidden lg:flex items-center gap-1.5">
+                {[36, 36, 36].map((w, i) => (
+                  <div key={i} className="h-6 bg-slate-800 rounded-md" style={{ width: w }} />
+                ))}
+                <div className="w-px h-4 bg-slate-800 mx-1.5" />
+                {[48, 48].map((w, i) => (
+                  <div key={i} className="h-6 bg-slate-800 rounded-md" style={{ width: w }} />
+                ))}
+              </div>
+            </div>
+            <div className="lg:hidden border-t border-slate-800/40 h-10 flex items-center gap-1.5 overflow-hidden">
+              {[36, 36, 36, 'px', 48, 48].map((w, i) =>
+                w === 'px'
+                  ? <div key={i} className="w-px h-4 bg-slate-800 shrink-0 mx-1" />
+                  : <div key={i} className="h-5 bg-slate-800 rounded-md shrink-0" style={{ width: w as number }} />
+              )}
+            </div>
+          </div>
+        </nav>
+
+        <div className="max-w-6xl mx-auto px-4 pt-10 pb-20">
+          {/* Hero skeleton */}
+          <div className="flex items-end justify-between gap-4 mb-10">
+            <div className="flex items-stretch gap-4 min-w-0">
+              <div className="w-[3px] rounded-full bg-slate-800 self-stretch" />
+              <div className="h-14 sm:h-16 w-56 bg-slate-800 rounded-lg" />
+            </div>
+            <div className="flex flex-col items-end gap-2 shrink-0 pb-1">
+              <div className="flex gap-1">
+                {[1,2,3].map(i => <div key={i} className="w-9 h-5 bg-slate-800 rounded" />)}
+              </div>
+              <div className="flex gap-1">
+                {[1,2].map(i => <div key={i} className="w-9 h-5 bg-slate-800 rounded" />)}
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop heatmap skeleton */}
+          <div className="hidden lg:block border border-slate-800/60 rounded-xl bg-slate-900/30 overflow-hidden p-5">
+            <div className="min-w-[600px]">
+              <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-1">
+                <div />
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="h-6 mx-0.5 bg-slate-800 rounded" />
+                ))}
+              </div>
+              <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-2">
+                <div className="h-3 w-14 bg-slate-800 rounded self-center" />
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="h-4 mx-0.5 bg-slate-800/50 rounded" />
+                ))}
+              </div>
+              {[1,2,3,4,5].map(row => (
+                <div key={row} className="grid grid-cols-[100px_repeat(12,1fr)] mb-px">
+                  <div className="flex flex-col gap-1 justify-center pr-3">
+                    <div className="h-3 w-14 bg-slate-800 rounded" />
+                    <div className="h-2 w-8 bg-slate-800/60 rounded" />
+                  </div>
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div key={i} className="h-10 mx-px bg-slate-800 rounded" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile month list skeleton */}
+          <div className="lg:hidden space-y-1.5">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="h-16 bg-slate-800/30 rounded-xl border border-l-[3px] border-transparent border-l-slate-700" />
             ))}
           </div>
         </div>
@@ -261,7 +340,7 @@ export default function App() {
             {/* sticky sheet header */}
             <div className="shrink-0 flex items-center justify-between px-5 pt-3 pb-3">
               <span className="text-sm font-bold text-white">
-                {['January','February','March','April','May','June','July','August','September','October','November','December'][selectedMonth - 1]}
+                {MONTH_FULL[selectedMonth - 1]}
               </span>
               <button
                 onClick={() => setSelectedMonth(null)}

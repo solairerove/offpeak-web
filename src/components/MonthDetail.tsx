@@ -5,9 +5,7 @@ import {
   getHolidaysForMonth,
   getWorstHolidayPenalty,
 } from '../lib/scoring';
-
-const MONTHS = ['January','February','March','April','May','June',
-  'July','August','September','October','November','December'];
+import { MONTH_SHORT, MONTH_FULL } from '../lib/constants';
 
 interface Props {
   city: CityData;
@@ -19,8 +17,7 @@ interface Props {
 
 function formatDate(iso: string): string {
   const parts = iso.split('-');
-  const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${mn[parseInt(parts[1], 10) - 1]} ${parseInt(parts[2], 10)}`;
+  return `${MONTH_SHORT[parseInt(parts[1], 10) - 1]} ${parseInt(parts[2], 10)}`;
 }
 
 const CROWD_LABEL: Record<string, string> = {
@@ -96,7 +93,7 @@ export default function MonthDetail({ city, month, activeYears, planningYear, on
           {/* header: desktop only (mobile has sticky header in the sheet) */}
           <div className="hidden lg:flex items-start justify-between mb-8">
             <div>
-              <h2 className="text-2xl font-black text-white leading-tight">{MONTHS[month - 1]}</h2>
+              <h2 className="text-2xl font-black text-white leading-tight">{MONTH_FULL[month - 1]}</h2>
               <p className="text-xs text-slate-600 mt-0.5">{city.city} · {planningYear}</p>
             </div>
             <button

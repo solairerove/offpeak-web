@@ -8,11 +8,7 @@ import {
 } from '../lib/scoring';
 import { getMetricColor } from '../lib/colors';
 import HolidayBadge from './HolidayBadge';
-
-const MONTH_FULL = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-];
+import { MONTH_FULL } from '../lib/constants';
 
 function crowdLabel(score: number): string {
   if (score <= 3)   return 'Low crowds';
