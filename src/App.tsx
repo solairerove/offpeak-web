@@ -26,11 +26,17 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
+  // ── Data fetching ────────────────────────────────────────────
   useEffect(() => {
     async function init() {
       try {
         const slugs = await fetchCities();
-        const allCities = await Promise.all(slugs.map(fetchCity));
+        // allSettled: partial failures don't kill the whole app
+        const results = await Promise.allSettled(slugs.map(fetchCity));
+        const allCities = results
+          .filter((r): r is PromiseFulfilledResult<CityData> => r.status === 'fulfilled')
+          .map(r => r.value);
+        if (allCities.length === 0) throw new Error('No city data could be loaded');
         setCities(allCities);
         setSelectedCitySlug(allCities[0].slug);
         setSelectedYears(allCities[0].arrivals.years);
@@ -43,7 +49,28 @@ export default function App() {
     init();
   }, []);
 
+  // ── Escape to close detail ───────────────────────────────────
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSelectedMonth(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // ── Scroll to detail panel when month selected ───────────────
+  useEffect(() => {
+    if (selectedMonth !== null) {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedMonth]);
+
   const city = cities.find(c => c.slug === selectedCitySlug);
+
+  // ── Dynamic page title ───────────────────────────────────────
+  useEffect(() => {
+    document.title = city ? `offpeak — ${city.city}` : 'offpeak';
+  }, [city]);
 
   const availablePlanningYears = useMemo(() => {
     const yearSet = new Set<number>();
@@ -72,7 +99,7 @@ export default function App() {
       const overall = computeOverallScore(comfort, crowd, penalty);
       return { month: w.month, overall };
     }).sort((a, b) => b.overall - a.overall);
-    const best = scored.slice(0, 3).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
+    const best  = scored.slice(0, 3).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
     const avoid = scored.slice(-2).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
     return { best, avoid };
   }, [cityWithDynamicArrivals, planningYear]);
@@ -85,13 +112,10 @@ export default function App() {
   }
 
   function handleSelectMonth(m: number) {
-    const next = selectedMonth === m ? null : m;
-    setSelectedMonth(next);
-    if (next !== null) {
-      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
-    }
+    setSelectedMonth(prev => prev === m ? null : m);
   }
 
+  // ── Loading / error states ───────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -207,9 +231,27 @@ export default function App() {
             onClick={() => setSelectedMonth(null)}
           />
           <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900 rounded-t-2xl border-t border-slate-800/60 max-h-[88vh] flex flex-col">
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
+            {/* drag handle */}
+            <div className="flex justify-center pt-3 pb-0 shrink-0">
               <div className="w-8 h-1 bg-slate-700 rounded-full" />
             </div>
+            {/* sticky sheet header */}
+            <div className="shrink-0 flex items-center justify-between px-5 pt-3 pb-3">
+              <span className="text-sm font-bold text-white">
+                {['January','February','March','April','May','June','July','August','September','October','November','December'][selectedMonth - 1]}
+              </span>
+              <button
+                onClick={() => setSelectedMonth(null)}
+                aria-label="Close"
+                className="text-slate-500 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" strokeLinecap="round">
+                  <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.75"/>
+                </svg>
+              </button>
+            </div>
+            <div className="w-full h-px bg-slate-800/60 shrink-0" />
+            {/* scrollable content */}
             <div className="overflow-y-auto flex-1 pb-safe">
               <MonthDetail {...sharedProps} />
             </div>

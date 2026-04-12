@@ -93,7 +93,8 @@ export default function MonthDetail({ city, month, activeYears, planningYear, on
 
         {/* ── Col 1: Month + Score ─────────────────────────── */}
         <div className="mb-6 lg:mb-0">
-          <div className="flex items-start justify-between mb-6 lg:mb-8">
+          {/* header: desktop only (mobile has sticky header in the sheet) */}
+          <div className="hidden lg:flex items-start justify-between mb-8">
             <div>
               <h2 className="text-2xl font-black text-white leading-tight">{MONTHS[month - 1]}</h2>
               <p className="text-xs text-slate-600 mt-0.5">{city.city} · {planningYear}</p>
