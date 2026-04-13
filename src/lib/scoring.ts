@@ -72,15 +72,26 @@ export function getWorstHolidayPenalty(holidays: Holiday[]): number {
   return worst; // 0, 1, 2, 3
 }
 
-// overall = 0.4*comfort + 0.4*(11-crowd) + 0.2*(10-penalty)
-// max: 0.4*10 + 0.4*10 + 0.2*10 = 10
-// min: 0.4*2  + 0.4*1  + 0.2*7  ≈ 2.6
+function typhoonPenalty(risk: string): number {
+  switch (risk) {
+    case 'none':     return 0;
+    case 'low':      return 0.5;
+    case 'moderate': return 2;
+    case 'high':     return 6;
+    default:         return 0;
+  }
+}
+
+// overall = 0.35*comfort + 0.35*(11-crowd) + 0.15*(10-holidayPenalty) + 0.15*(10-typhoonPenalty)
+// max: 0.35*10 + 0.35*10 + 0.15*10 + 0.15*10 = 10
+// min: 0.35*2  + 0.35*1  + 0.15*7  + 0.15*4  ≈ 2.9
 export function computeOverallScore(
   comfort: number,        // 2–10
   crowd: number,          // 1–10
   holidayPenalty: number, // 0–3 (0=none, 3=extreme)
+  typhoon: string,        // 'none' | 'low' | 'moderate' | 'high'
 ): number {
-  const raw = 0.4 * comfort + 0.4 * (11 - crowd) + 0.2 * (10 - holidayPenalty);
+  const raw = 0.35 * comfort + 0.35 * (11 - crowd) + 0.15 * (10 - holidayPenalty) + 0.15 * (10 - typhoonPenalty(typhoon));
   return Math.round(Math.max(1, Math.min(10, raw)) * 10) / 10;
 }
 

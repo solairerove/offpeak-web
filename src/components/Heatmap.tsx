@@ -46,7 +46,7 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
       const crowd = crowdEntry?.normalized ?? 5;
       const monthHolidays = getHolidaysForMonth(city.holidays, w.month, planningYear);
       const penalty = getWorstHolidayPenalty(monthHolidays);
-      const overall = computeOverallScore(comfort, crowd, penalty);
+      const overall = computeOverallScore(comfort, crowd, penalty, w.typhoon_risk);
       const typhoon = typhoonRiskToScore(w.typhoon_risk);
       return { month: w.month, overall, comfort, crowds: crowd, rain_days: w.rain_days, typhoon };
     });
