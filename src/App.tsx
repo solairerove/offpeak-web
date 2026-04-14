@@ -159,12 +159,28 @@ export default function App() {
     if (slug === selectedCitySlug) return;
     setSelectedCitySlug(slug);
     setSelectedMonth(null);
-    setSelectedYears([]);
-    // Seed staleCity with any previously loaded data for this slug so the UI
-    // can show something immediately if we've visited it before; otherwise
-    // clear it so the full skeleton renders.
-    const prev = Object.entries(cityCacheRef.current).find(([k]) => k.startsWith(`${slug}:`));
-    setStaleCity(prev?.[1]);
+
+    // Look for an exact cache match (same slug + current planningYear).
+    // If found, set years upfront so cacheKey resolves to the cached entry
+    // on the very first render — no re-fetch, no opacity-40 flash.
+    const exactEntry = Object.entries(cityCacheRef.current).find(
+      ([k]) => k.startsWith(`${slug}:${planningYear}:`),
+    );
+    if (exactEntry) {
+      const data = exactEntry[1];
+      setStaleCity(data);
+      setSelectedYears(data.arrivals.years);
+    } else {
+      // No exact match — show any stale data as placeholder while loading.
+      const anyEntry = Object.entries(cityCacheRef.current).find(
+        ([k]) => k.startsWith(`${slug}:`),
+      );
+      setStaleCity(anyEntry?.[1]);
+      setSelectedYears([]);
+      // Eagerly signal loading when there is nothing to show at all, so the
+      // skeleton renders on the first paint instead of a blank frame.
+      if (!anyEntry) setCityLoading(true);
+    }
   }
 
   const handleSelectMonth = useCallback((m: number) => {
