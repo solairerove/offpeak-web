@@ -29,10 +29,9 @@ export default function App() {
   const cityCacheRef = useRef<Record<string, CityData>>({});
   cityCacheRef.current = cityCache;
 
-  // Derive year range params — undefined when no years selected (= all years on backend)
-  const yearFrom = selectedYears.length > 0 ? Math.min(...selectedYears) : undefined;
-  const yearTo   = selectedYears.length > 0 ? Math.max(...selectedYears) : undefined;
-  const cacheKey = `${selectedCitySlug}:${planningYear}:${yearFrom ?? ''}:${yearTo ?? ''}`;
+  // Pass selected years directly; empty = backend uses all available years
+  const yearsParam = selectedYears.length > 0 ? selectedYears : undefined;
+  const cacheKey = `${selectedCitySlug}:${planningYear}:${selectedYears.join(',')}`;
 
   // ── Fetch city list on mount ─────────────────────────────────
   useEffect(() => {
@@ -74,16 +73,16 @@ export default function App() {
     setCityLoading(true);
     setCityError(null);
 
-    fetchCity(selectedCitySlug, planningYear, yearFrom, yearTo, signal)
+    fetchCity(selectedCitySlug, planningYear, yearsParam, signal)
       .then(data => {
         if (signal.aborted) return;
         setCityCache(prev => {
           const next = { ...prev, [cacheKey]: data };
-          // Pre-warm the full-range key so the second render (after selectedYears
+          // Pre-warm the all-years key so the second render (after selectedYears
           // populates) hits the cache instead of triggering another fetch.
-          if (!yearFrom && !yearTo && data.arrivals.years.length > 0) {
-            const yr = data.arrivals.years;
-            const fullKey = `${selectedCitySlug}:${planningYear}:${Math.min(...yr)}:${Math.max(...yr)}`;
+          if (!yearsParam && data.arrivals.years.length > 0) {
+            const allYears = [...data.arrivals.years].sort((a, b) => a - b);
+            const fullKey = `${selectedCitySlug}:${planningYear}:${allYears.join(',')}`;
             next[fullKey] = data;
           }
           return next;

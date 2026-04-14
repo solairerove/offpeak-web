@@ -10,22 +10,21 @@ export async function fetchCities(signal?: AbortSignal): Promise<CityListItem[]>
   return res.json();
 }
 
-// Deduplicate concurrent requests for the same (slug, year, yearFrom, yearTo).
+// Deduplicate concurrent requests for the same (slug, planningYear, years).
 const inflight = new Map<string, Promise<CityData>>();
 
 export function fetchCity(
   slug: string,
-  year: number,
-  yearFrom?: number,
-  yearTo?: number,
+  planningYear: number,
+  years?: number[],
   signal?: AbortSignal,
 ): Promise<CityData> {
-  const key = `${slug}:${year}:${yearFrom ?? ''}:${yearTo ?? ''}`;
+  const yearsStr = years && years.length > 0 ? years.join(',') : '';
+  const key = `${slug}:${planningYear}:${yearsStr}`;
   if (inflight.has(key)) return inflight.get(key)!;
 
-  const params = new URLSearchParams({ year: String(year) });
-  if (yearFrom !== undefined) params.set('year_from', String(yearFrom));
-  if (yearTo   !== undefined) params.set('year_to',   String(yearTo));
+  const params = new URLSearchParams({ planning_year: String(planningYear) });
+  if (yearsStr) params.set('years', yearsStr);
 
   const promise = fetch(`${BASE}/api/v1/cities/${slug}?${params}`, { signal })
     .then(res => {
