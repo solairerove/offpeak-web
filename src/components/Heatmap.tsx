@@ -55,6 +55,25 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
     return out;
   }, [scores]);
 
+  const priceRowData = useMemo(() => {
+    const entries = city.monthly_scores.map(ms => ({ month: ms.month, price_index: ms.price_index }));
+    const hasPricing = entries.some(e => e.price_index !== null);
+    if (!hasPricing) return null;
+
+    const nonNullValues = entries.filter(e => e.price_index !== null).map(e => e.price_index as number);
+    const cells = entries.map(e => {
+      if (e.price_index === null) {
+        return { month: e.month, bgColor: 'rgb(30,41,59)', displayValue: '—' };
+      }
+      return {
+        month: e.month,
+        bgColor: getMetricColor(e.price_index, nonNullValues, true),
+        displayValue: String(Math.round(e.price_index)),
+      };
+    });
+    return cells;
+  }, [city.monthly_scores]);
+
   // Pre-compute every cell's bgColor + displayValue so the render path
   // only reads from this matrix — no Math.min/max or string formatting per render.
   // Keyed as cellMatrix[metricIndex][monthIndex].
@@ -134,6 +153,26 @@ export default function Heatmap({ city, planningYear, selectedMonth, onSelectMon
             ))}
           </div>
         ))}
+
+        {/* Price row — only when at least one month has pricing data */}
+        {priceRowData && (
+          <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-px">
+            <div className="flex flex-col justify-center pr-3">
+              <span className="text-xs font-medium text-slate-500">Price</span>
+              <span className="text-[10px] text-slate-700">index</span>
+            </div>
+            {priceRowData.map(cell => (
+              <HeatmapCell
+                key={cell.month}
+                month={cell.month}
+                value={cell.displayValue}
+                bgColor={cell.bgColor}
+                isSelected={selectedMonth === cell.month}
+                onSelect={handleCellSelect}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Legend */}
         <div className="flex items-center gap-2.5 mt-5 ml-[100px]">

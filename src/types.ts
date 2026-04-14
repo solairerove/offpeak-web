@@ -33,6 +33,8 @@ export interface MonthScore {
   crowd_index: number;
   typhoon_penalty: number;
   holiday_penalty: number;
+  price_index: number | null;
+  price_penalty: number | null;
   overall: number;
 }
 

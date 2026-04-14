@@ -59,6 +59,7 @@ export default function MonthDetail({ city, month, activeYears, planningYear, on
   const overall = ms?.overall ?? 0;
   const comfort = ms?.comfort ?? 0;
   const crowd = ms?.crowd_index ?? 0;
+  const priceIndex = ms?.price_index ?? null;
 
   const holidays = getHolidaysForMonth(city.holidays, month, planningYear);
 
@@ -119,6 +120,19 @@ export default function MonthDetail({ city, month, activeYears, planningYear, on
               <div className="text-2xl lg:text-3xl font-black text-slate-300 tabular-nums">{crowd.toFixed(1)}</div>
               <div className="text-[10px] text-slate-600 uppercase tracking-widest mt-1.5">Crowds</div>
             </div>
+          </div>
+
+          <div className="mt-5 pt-5 border-t border-slate-800/60">
+            {priceIndex !== null ? (
+              <div>
+                <div className="text-sm font-semibold text-slate-300 tabular-nums">
+                  Price index: {Math.round(priceIndex)}
+                </div>
+                <div className="text-[10px] text-slate-600 mt-1">100 = annual average for this city</div>
+              </div>
+            ) : (
+              <div className="text-sm text-slate-600">Price: no data</div>
+            )}
           </div>
         </div>
 
