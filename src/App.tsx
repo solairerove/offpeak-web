@@ -1,23 +1,16 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { fetchCities, fetchCity } from './api';
-import {
-  computeMonthlyIndex,
-  computeComfortScore,
-  computeOverallScore,
-  getHolidaysForMonth,
-  getWorstHolidayPenalty,
-} from './lib/scoring';
 import CitySelector from './components/CitySelector';
 import YearRangeSelector from './components/YearRangeSelector';
 import PlanningYearSelector from './components/PlanningYearSelector';
 import Heatmap from './components/Heatmap';
 import MobileMonthList from './components/MobileMonthList';
 import MonthDetail from './components/MonthDetail';
-import type { CityData } from './types';
+import type { CityData, CityListItem } from './types';
 import { MONTH_SHORT, MONTH_FULL } from './lib/constants';
 
 export default function App() {
-  const [slugs, setSlugs] = useState<string[]>([]);
+  const [cities, setCities] = useState<CityListItem[]>([]);
   const [cityCache, setCityCache] = useState<Record<string, CityData>>({});
   const [selectedCitySlug, setSelectedCitySlug] = useState<string>('');
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
@@ -27,23 +20,31 @@ export default function App() {
   const [cityLoading, setCityLoading] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [cityError, setCityError] = useState<string | null>(null);
+  // Last successfully loaded data for the current slug — shown while re-fetching
+  // new params so the UI never goes blank on planningYear / year-range changes.
+  const [staleCity, setStaleCity] = useState<CityData | undefined>();
   const detailRef = useRef<HTMLDivElement>(null);
 
   // Ref-sync: lets effects read the latest cache without adding cityCache to deps
   const cityCacheRef = useRef<Record<string, CityData>>({});
   cityCacheRef.current = cityCache;
 
-  // ── Fetch city slugs on mount ────────────────────────────────
+  // Derive year range params — undefined when no years selected (= all years on backend)
+  const yearFrom = selectedYears.length > 0 ? Math.min(...selectedYears) : undefined;
+  const yearTo   = selectedYears.length > 0 ? Math.max(...selectedYears) : undefined;
+  const cacheKey = `${selectedCitySlug}:${planningYear}:${yearFrom ?? ''}:${yearTo ?? ''}`;
+
+  // ── Fetch city list on mount ─────────────────────────────────
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
 
     async function init() {
       try {
-        const fetchedSlugs = await fetchCities(signal);
-        if (fetchedSlugs.length === 0) throw new Error('No cities available');
-        setSlugs(fetchedSlugs);
-        setSelectedCitySlug(fetchedSlugs[0]);
+        const fetchedCities = await fetchCities(signal);
+        if (fetchedCities.length === 0) throw new Error('No cities available');
+        setCities(fetchedCities);
+        setSelectedCitySlug(fetchedCities[0].slug);
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return;
         setInitError(e instanceof Error ? e.message : 'Failed to load cities');
@@ -56,13 +57,14 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
-  // ── Load city data on demand, serve from cache if already loaded ─
+  // ── Load city data; re-fetch when slug, planningYear, or year range changes ─
   useEffect(() => {
     if (!selectedCitySlug) return;
 
-    const cached = cityCacheRef.current[selectedCitySlug];
-    if (cached) {
-      setSelectedYears(cached.arrivals.years);
+    if (cityCacheRef.current[cacheKey]) {
+      // Cache hit — ensure selectedYears are populated if this is post-city-switch
+      const cached = cityCacheRef.current[cacheKey];
+      if (selectedYears.length === 0) setSelectedYears(cached.arrivals.years);
       return;
     }
 
@@ -72,11 +74,22 @@ export default function App() {
     setCityLoading(true);
     setCityError(null);
 
-    fetchCity(selectedCitySlug, signal)
+    fetchCity(selectedCitySlug, planningYear, yearFrom, yearTo, signal)
       .then(data => {
         if (signal.aborted) return;
-        setCityCache(prev => ({ ...prev, [selectedCitySlug]: data }));
-        setSelectedYears(data.arrivals.years);
+        setCityCache(prev => {
+          const next = { ...prev, [cacheKey]: data };
+          // Pre-warm the full-range key so the second render (after selectedYears
+          // populates) hits the cache instead of triggering another fetch.
+          if (!yearFrom && !yearTo && data.arrivals.years.length > 0) {
+            const yr = data.arrivals.years;
+            const fullKey = `${selectedCitySlug}:${planningYear}:${Math.min(...yr)}:${Math.max(...yr)}`;
+            next[fullKey] = data;
+          }
+          return next;
+        });
+        setStaleCity(data);
+        if (selectedYears.length === 0) setSelectedYears(data.arrivals.years);
         setCityLoading(false);
       })
       .catch(e => {
@@ -87,7 +100,8 @@ export default function App() {
       });
 
     return () => controller.abort();
-  }, [selectedCitySlug]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey]);
 
   // ── Escape to close detail ───────────────────────────────────
   useEffect(() => {
@@ -105,20 +119,22 @@ export default function App() {
     }
   }, [selectedMonth]);
 
-  const city = selectedCitySlug ? cityCache[selectedCitySlug] : undefined;
+  const city = selectedCitySlug ? cityCache[cacheKey] : undefined;
+  // Show stale data while re-fetching so the UI never goes blank on param changes.
+  const displayCity = city ?? staleCity;
+  // True when we're refetching with new params but have old data to show.
+  const isRefetching = !city && !!staleCity && cityLoading;
+  // True only on the very first load for a slug (nothing to show yet).
+  const showSkeleton  = cityLoading && !displayCity;
 
   // ── Dynamic page title ───────────────────────────────────────
   useEffect(() => {
-    document.title = city ? `offpeak — ${city.city}` : 'offpeak';
-  }, [city]);
+    document.title = displayCity ? `offpeak — ${displayCity.city}` : 'offpeak';
+  }, [displayCity]);
 
-  // Display names for tabs: real name once loaded, formatted slug as placeholder before
   const cityList = useMemo(
-    () => slugs.map(slug => ({
-      slug,
-      city: cityCache[slug]?.city ?? slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    })),
-    [slugs, cityCache],
+    () => cities.map(c => ({ slug: c.slug, city: c.name })),
+    [cities],
   );
 
   const availablePlanningYears = useMemo(() => {
@@ -131,40 +147,31 @@ export default function App() {
     return Array.from(yearSet).sort();
   }, [cityCache]);
 
-  const cityWithDynamicArrivals = useMemo(() => {
-    if (!city) return null;
-    const monthly_index = computeMonthlyIndex(city.arrivals.data, selectedYears);
-    return { ...city, arrivals: { ...city.arrivals, monthly_index } };
-  }, [city, selectedYears]);
-
   const monthSummary = useMemo(() => {
-    if (!cityWithDynamicArrivals) return { best: [] as string[], avoid: [] as string[] };
-    const scored = cityWithDynamicArrivals.weather.map(w => {
-      const comfort = computeComfortScore(w.heat_index_c, w.rain_days);
-      const crowdEntry = cityWithDynamicArrivals.arrivals.monthly_index.find(m => m.month === w.month);
-      const crowd = crowdEntry?.normalized ?? 5;
-      const monthHols = getHolidaysForMonth(cityWithDynamicArrivals.holidays, w.month, planningYear);
-      const penalty = getWorstHolidayPenalty(monthHols);
-      const overall = computeOverallScore(comfort, crowd, penalty);
-      return { month: w.month, overall };
-    }).sort((a, b) => b.overall - a.overall);
-    const best  = scored.slice(0, 3).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
-    const avoid = scored.slice(-2).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
+    if (!displayCity) return { best: [] as string[], avoid: [] as string[] };
+    const sorted = [...displayCity.monthly_scores].sort((a, b) => b.overall - a.overall);
+    const best  = sorted.slice(0, 3).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
+    const avoid = sorted.slice(-2).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
     return { best, avoid };
-  }, [cityWithDynamicArrivals, planningYear]);
+  }, [displayCity]);
 
   function handleCityChange(slug: string) {
     if (slug === selectedCitySlug) return;
     setSelectedCitySlug(slug);
     setSelectedMonth(null);
-    // selectedYears is reset by the on-demand effect once city data arrives (or from cache)
+    setSelectedYears([]);
+    // Seed staleCity with any previously loaded data for this slug so the UI
+    // can show something immediately if we've visited it before; otherwise
+    // clear it so the full skeleton renders.
+    const prev = Object.entries(cityCacheRef.current).find(([k]) => k.startsWith(`${slug}:`));
+    setStaleCity(prev?.[1]);
   }
 
   const handleSelectMonth = useCallback((m: number) => {
     setSelectedMonth(prev => prev === m ? null : m);
   }, []);
 
-  // ── Initial loading (slug fetch) ─────────────────────────────
+  // ── Initial loading (city list fetch) ────────────────────────
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 animate-pulse">
@@ -256,7 +263,7 @@ export default function App() {
     );
   }
 
-  // ── Fatal error (slugs could not be fetched) ─────────────────
+  // ── Fatal error (city list could not be fetched) ─────────────
   if (initError) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -268,8 +275,8 @@ export default function App() {
     );
   }
 
-  const sharedProps = (city && cityWithDynamicArrivals) ? {
-    city: cityWithDynamicArrivals,
+  const sharedProps = displayCity ? {
+    city: displayCity,
     month: selectedMonth!,
     activeYears: selectedYears,
     planningYear,
@@ -296,18 +303,18 @@ export default function App() {
               loadingSlug={cityLoading ? selectedCitySlug : null}
             />
             {/* Desktop only — year selectors stay on the same row */}
-            {city && (
+            {displayCity && (
               <div className="ml-auto hidden lg:flex items-center gap-3">
-                <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
+                <YearRangeSelector years={displayCity.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
                 <div className="w-px h-4 bg-slate-800 shrink-0" />
                 <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
               </div>
             )}
           </div>
           {/* Row 2: mobile only — year selectors on their own scrollable row */}
-          {city && (
+          {displayCity && (
             <div className="lg:hidden border-t border-slate-800/40 h-10 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
+              <YearRangeSelector years={displayCity.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
               <div className="w-px h-4 bg-slate-800 shrink-0" />
               <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
             </div>
@@ -317,8 +324,8 @@ export default function App() {
 
       <div className="max-w-6xl mx-auto px-4 pt-10 pb-20">
 
-        {cityLoading ? (
-          /* ─── Per-city loading skeleton ──────────────────────── */
+        {showSkeleton ? (
+          /* ─── Per-city loading skeleton (first load only) ────── */
           <div className="animate-pulse">
             <div className="flex items-end justify-between gap-4 mb-10">
               <div className="flex items-stretch gap-4 min-w-0">
@@ -367,19 +374,19 @@ export default function App() {
               ))}
             </div>
           </div>
-        ) : cityError ? (
-          /* ─── Per-city error ─────────────────────────────────── */
+        ) : cityError && !displayCity ? (
+          /* ─── Per-city error (no stale data to fall back on) ─── */
           <div className="flex items-center justify-center py-20">
             <p className="text-rose-400 text-sm">{cityError}</p>
           </div>
-        ) : city && cityWithDynamicArrivals && sharedProps ? (
-          <>
+        ) : displayCity && sharedProps ? (
+          <div className={`transition-opacity duration-200 ${isRefetching ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
             {/* ─── City hero ───────────────────────────────────── */}
             <div className="flex items-end justify-between gap-4 mb-10">
               <div className="flex items-stretch gap-4 min-w-0">
                 <div className="w-[3px] rounded-full bg-teal-500 shrink-0 self-stretch" />
                 <h2 className="text-5xl sm:text-6xl font-black tracking-tighter text-white leading-none">
-                  {city.city}
+                  {displayCity.city}
                 </h2>
               </div>
               <div className="flex flex-col items-end gap-1.5 sm:gap-2 shrink-0 pb-1">
@@ -409,7 +416,7 @@ export default function App() {
             {/* ─── Desktop: heatmap ────────────────────────────── */}
             <div className="hidden lg:block">
               <Heatmap
-                city={cityWithDynamicArrivals}
+                city={displayCity}
                 planningYear={planningYear}
                 selectedMonth={selectedMonth}
                 onSelectMonth={handleSelectMonth}
@@ -419,7 +426,7 @@ export default function App() {
             {/* ─── Mobile: month cards ─────────────────────────── */}
             <div className="lg:hidden">
               <MobileMonthList
-                city={cityWithDynamicArrivals}
+                city={displayCity}
                 planningYear={planningYear}
                 selectedMonth={selectedMonth}
                 onSelectMonth={handleSelectMonth}
@@ -434,7 +441,7 @@ export default function App() {
                 </div>
               </div>
             )}
-          </>
+          </div>
         ) : null}
       </div>
 

@@ -1,12 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import type { CityData } from '../types';
-import {
-  computeComfortScore,
-  computeOverallScore,
-  getHolidaysForMonth,
-  getWorstHolidayPenalty,
-  typhoonRiskToScore,
-} from '../lib/scoring';
+import { getHolidaysForMonth } from '../lib/holidays';
 import { getMetricColor } from '../lib/colors';
 import HeatmapCell from './HeatmapCell';
 import HolidayBadge from './HolidayBadge';
@@ -40,17 +34,18 @@ interface Props {
 
 export default function Heatmap({ city, planningYear, selectedMonth, onSelectMonth }: Props) {
   const scores = useMemo(() => {
-    return city.weather.map(w => {
-      const comfort = computeComfortScore(w.heat_index_c, w.rain_days);
-      const crowdEntry = city.arrivals.monthly_index.find(m => m.month === w.month);
-      const crowd = crowdEntry?.normalized ?? 5;
-      const monthHolidays = getHolidaysForMonth(city.holidays, w.month, planningYear);
-      const penalty = getWorstHolidayPenalty(monthHolidays);
-      const overall = computeOverallScore(comfort, crowd, penalty, w.typhoon_risk);
-      const typhoon = typhoonRiskToScore(w.typhoon_risk);
-      return { month: w.month, overall, comfort, crowds: crowd, rain_days: w.rain_days, typhoon };
+    return city.monthly_scores.map(ms => {
+      const w = city.weather.find(w => w.month === ms.month)!;
+      return {
+        month: ms.month,
+        overall: ms.overall,
+        comfort: ms.comfort,
+        crowds: ms.crowd_index,
+        rain_days: w.rain_days,
+        typhoon: ms.typhoon_penalty,
+      };
     });
-  }, [city, planningYear]);
+  }, [city]);
 
   const valuesByMetric = useMemo(() => {
     const out: Record<string, number[]> = {};

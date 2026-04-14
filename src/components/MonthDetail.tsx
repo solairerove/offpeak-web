@@ -1,10 +1,5 @@
 import type { CityData } from '../types';
-import {
-  computeComfortScore,
-  computeOverallScore,
-  getHolidaysForMonth,
-  getWorstHolidayPenalty,
-} from '../lib/scoring';
+import { getHolidaysForMonth } from '../lib/holidays';
 import { MONTH_SHORT, MONTH_FULL } from '../lib/constants';
 
 interface Props {
@@ -60,12 +55,12 @@ export default function MonthDetail({ city, month, activeYears, planningYear, on
   const w = city.weather.find(m => m.month === month);
   if (!w) return null;
 
-  const comfort = computeComfortScore(w.heat_index_c, w.rain_days);
-  const crowdEntry = city.arrivals.monthly_index.find(m => m.month === month);
-  const crowd = crowdEntry?.normalized ?? 0;
+  const ms = city.monthly_scores.find(s => s.month === month);
+  const overall = ms?.overall ?? 0;
+  const comfort = ms?.comfort ?? 0;
+  const crowd = ms?.crowd_index ?? 0;
+
   const holidays = getHolidaysForMonth(city.holidays, month, planningYear);
-  const penalty = getWorstHolidayPenalty(holidays);
-  const overall = computeOverallScore(comfort, crowd, penalty);
 
   const yearlyVisitors = city.arrivals.data
     .filter(d => d.month === month && activeYears.includes(d.year))
@@ -108,7 +103,7 @@ export default function MonthDetail({ city, month, activeYears, planningYear, on
           </div>
 
           <div className={`text-5xl lg:text-8xl font-black tabular-nums leading-none ${overallColor}`}>
-            {overall}
+            {overall.toFixed(1)}
           </div>
           <div className="text-[10px] text-slate-600 uppercase tracking-widest mt-2 mb-6 lg:mb-8">
             Overall score
