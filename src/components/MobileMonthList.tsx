@@ -19,6 +19,13 @@ function crowdColor(score: number): string {
   return 'text-orange-400';
 }
 
+function formatPriceIndex(value: number): { label: string; className: string } {
+  const delta = Math.round(value - 100);
+  if (delta === 0) return { label: 'avg price', className: 'text-slate-500' };
+  if (delta > 0)   return { label: `+${delta}% price`, className: 'text-rose-400/80' };
+  return { label: `${delta}% price`, className: 'text-teal-400/80' };
+}
+
 interface Props {
   city: CityData;
   planningYear: number;
@@ -31,7 +38,7 @@ export default function MobileMonthList({ city, planningYear, selectedMonth, onS
     return city.monthly_scores.map(ms => {
       const w = city.weather.find(w => w.month === ms.month)!;
       const monthHolidays = getHolidaysForMonth(city.holidays, ms.month, planningYear);
-      return { month: ms.month, overall: ms.overall, crowd: ms.crowd_index, weather: w, holidays: monthHolidays };
+      return { month: ms.month, overall: ms.overall, crowd: ms.crowd_index, priceIndex: ms.price_index ?? null, weather: w, holidays: monthHolidays };
     });
   }, [city, planningYear]);
 
@@ -86,6 +93,15 @@ export default function MobileMonthList({ city, planningYear, selectedMonth, onS
                 <span className={`text-[10px] font-medium ${crowdColor(r.crowd)}`}>
                   {crowdLabel(r.crowd)}
                 </span>
+                {r.priceIndex !== null && (() => {
+                  const { label, className } = formatPriceIndex(r.priceIndex);
+                  return (
+                    <>
+                      <span className="text-slate-700 text-[10px]">·</span>
+                      <span className={`text-[10px] font-medium ${className}`}>{label}</span>
+                    </>
+                  );
+                })()}
                 {r.holidays.length > 0 && (
                   <div className="shrink-0">
                     <HolidayBadge holidays={r.holidays} />
