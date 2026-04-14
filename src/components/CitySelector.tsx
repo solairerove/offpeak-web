@@ -1,12 +1,16 @@
-import type { CityData } from '../types';
-
-interface Props {
-  cities: CityData[];
-  selected: string;
-  onSelect: (slug: string) => void;
+interface CitySummary {
+  slug: string;
+  city: string;
 }
 
-export default function CitySelector({ cities, selected, onSelect }: Props) {
+interface Props {
+  cities: CitySummary[];
+  selected: string;
+  onSelect: (slug: string) => void;
+  loadingSlug?: string | null;
+}
+
+export default function CitySelector({ cities, selected, onSelect, loadingSlug }: Props) {
   return (
     <div className="flex gap-0.5">
       {cities.map(c => (
@@ -22,6 +26,9 @@ export default function CitySelector({ cities, selected, onSelect }: Props) {
           `}
         >
           {c.city}
+          {loadingSlug === c.slug && (
+            <span className="ml-1.5 inline-block w-1 h-1 rounded-full bg-current align-middle animate-pulse" />
+          )}
         </button>
       ))}
     </div>

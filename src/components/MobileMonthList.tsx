@@ -1,11 +1,6 @@
 import { useMemo } from 'react';
 import type { CityData } from '../types';
-import {
-  computeComfortScore,
-  computeOverallScore,
-  getHolidaysForMonth,
-  getWorstHolidayPenalty,
-} from '../lib/scoring';
+import { getHolidaysForMonth } from '../lib/holidays';
 import { getMetricColor } from '../lib/colors';
 import HolidayBadge from './HolidayBadge';
 import { MONTH_FULL } from '../lib/constants';
@@ -24,6 +19,13 @@ function crowdColor(score: number): string {
   return 'text-orange-400';
 }
 
+function formatPriceIndex(value: number): { label: string; className: string } {
+  const delta = Math.round(value - 100);
+  if (delta === 0) return { label: 'avg price', className: 'text-slate-500' };
+  if (delta > 0)   return { label: `+${delta}% price`, className: 'text-rose-400/80' };
+  return { label: `${delta}% price`, className: 'text-teal-400/80' };
+}
+
 interface Props {
   city: CityData;
   planningYear: number;
@@ -33,14 +35,10 @@ interface Props {
 
 export default function MobileMonthList({ city, planningYear, selectedMonth, onSelectMonth }: Props) {
   const rows = useMemo(() => {
-    return city.weather.map(w => {
-      const comfort = computeComfortScore(w.heat_index_c, w.rain_days);
-      const crowdEntry = city.arrivals.monthly_index.find(m => m.month === w.month);
-      const crowd = crowdEntry?.normalized ?? 5;
-      const monthHolidays = getHolidaysForMonth(city.holidays, w.month, planningYear);
-      const penalty = getWorstHolidayPenalty(monthHolidays);
-      const overall = computeOverallScore(comfort, crowd, penalty);
-      return { month: w.month, overall, crowd, weather: w, holidays: monthHolidays };
+    return city.monthly_scores.map(ms => {
+      const w = city.weather.find(w => w.month === ms.month)!;
+      const monthHolidays = getHolidaysForMonth(city.holidays, ms.month, planningYear);
+      return { month: ms.month, overall: ms.overall, crowd: ms.crowd_index, priceIndex: ms.price_index ?? null, weather: w, holidays: monthHolidays };
     });
   }, [city, planningYear]);
 
@@ -95,6 +93,15 @@ export default function MobileMonthList({ city, planningYear, selectedMonth, onS
                 <span className={`text-[10px] font-medium ${crowdColor(r.crowd)}`}>
                   {crowdLabel(r.crowd)}
                 </span>
+                {r.priceIndex !== null && (() => {
+                  const { label, className } = formatPriceIndex(r.priceIndex);
+                  return (
+                    <>
+                      <span className="text-slate-700 text-[10px]">·</span>
+                      <span className={`text-[10px] font-medium ${className}`}>{label}</span>
+                    </>
+                  );
+                })()}
                 {r.holidays.length > 0 && (
                   <div className="shrink-0">
                     <HolidayBadge holidays={r.holidays} />

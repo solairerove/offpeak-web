@@ -6,7 +6,9 @@ Project state snapshot. Source of truth is the code; this document describes wha
 
 ## 1. Overview
 
-offpeak-web is a single-page React + TypeScript frontend that visualizes when to visit a set of cities across the 12 months of the year. It shows a heatmap of computed scores (overall, comfort, crowds, rain days, typhoon risk) and holiday markers per month, with a detail panel for the selected month. City and weather data are fetched at runtime from a separate backend API (offpeak-api). No data is hardcoded in this repo. Stack: React 18, TypeScript 5 (strict), Vite 5, Tailwind CSS 3, deployed as a Docker image (Node 20 build + Caddy 2 serve) on Railway.
+offpeak-web is a single-page React + TypeScript frontend that visualizes when to visit a set of cities across the 12 months of the year. It shows a heatmap of precomputed scores (overall, comfort, crowds, rain days, typhoon risk, price index) and holiday markers per month, with a detail panel for the selected month. City and weather data are fetched at runtime from a separate backend API (offpeak-api). No data is hardcoded in this repo. Stack: React 18, TypeScript 5 (strict), Vite 5, Tailwind CSS 3, deployed as a Docker image (Node 20 build + Caddy 2 serve) on Railway.
+
+All scoring is computed server-side and returned in `monthly_scores`. There is no client-side scoring logic.
 
 ---
 
@@ -28,7 +30,7 @@ npm run build
 npm run preview
 ```
 
-No test script. No lint script. TypeScript strict mode is on; `tsc` (run as part of `build`) is the only static check.
+Tests: `src/lib/colors.test.ts` uses Vitest. Run with `npx vitest`. No lint script. TypeScript strict mode is on; `tsc` (run as part of `build`) is the only static check included in the build pipeline.
 
 **Docker:**
 ```bash
@@ -75,14 +77,38 @@ export interface ArrivalsData {
   monthly_index: MonthlyIndex[];
 }
 
-export interface Holiday {
+export interface MonthScore {
+  month: number;
+  comfort: number;
+  crowd_index: number;
+  typhoon_penalty: number;
+  holiday_penalty: number;
+  price_index: number | null;
+  price_penalty: number | null;
+  overall: number;
+}
+
+export interface CityListItem {
+  slug: string;
   name: string;
-  typical_month_start: number;
-  typical_month_end: number;
-  crowd_impact: 'extreme' | 'very_high' | 'high' | 'moderate' | 'low';
+}
+
+export interface HolidayOccurrence {
+  year: number;
+  date_start: string;  // "YYYY-MM-DD"
+  date_end: string;    // "YYYY-MM-DD"; may be year+1 for Dec→Jan events
+  month_start: number;
+  month_end: number;
+}
+
+export interface Holiday {
+  id: string;
+  name: string;
+  crowd_impact: 'extreme' | 'very_high' | 'high' | 'moderate' | 'low' | 'none';
   price_impact: 'high' | 'moderate' | 'low' | 'none';
   closure_impact: 'significant' | 'minimal' | 'none';
   notes: string;
+  occurrences: HolidayOccurrence[];
 }
 
 export interface Note {
@@ -97,43 +123,50 @@ export interface CityData {
   arrivals: ArrivalsData;
   holidays: Holiday[];
   notes: Note[];
+  monthly_scores: MonthScore[];
 }
 ```
 
 - `WeatherMonth` — one month of observed weather data for a city.
 - `ArrivalDataPoint` — raw visitor arrival count (in thousands) for a specific city/year/month.
-- `MonthlyIndex` — precomputed crowd index (1–10) for one month; sent by the API but overwritten client-side.
-- `ArrivalsData` — all arrival data for a city: available year list, raw points, and the (overwritten) monthly index.
-- `Holiday` — a recurring event with crowd, price, and closure impact ratings.
-- `Note` — a city-level practical note tagged by category (visa, transport, etc.).
-- `CityData` — top-level city object; root of all data passed to components.
+- `MonthlyIndex` — present in `ArrivalsData` but not used for rendering (scores come from `monthly_scores`).
+- `ArrivalsData` — all arrival data for a city: available year list and raw points.
+- `MonthScore` — server-precomputed scores for one month. `price_index` and `price_penalty` are nullable (not all cities have pricing data).
+- `CityListItem` — the shape returned by `GET /api/v1/cities` (slug + display name).
+- `HolidayOccurrence` — a single dated occurrence of a recurring holiday, with exact ISO date range and month span.
+- `Holiday` — a recurring event with `id`, crowd/price/closure impact ratings, and a list of concrete `occurrences` per year. `crowd_impact` now includes `'none'`.
+- `Note` — a city-level practical note tagged by category.
+- `CityData` — top-level city object; root of all data passed to components. Includes `monthly_scores` with precomputed scores for all 12 months.
 
 ---
 
 ## 4. Data source
 
-All data is fetched from a remote REST API at startup. No local data files exist.
+All data is fetched from a remote REST API. No local data files exist.
 
 **Endpoints** (`src/api.ts`):
 
 ```
-GET /api/v1/cities          → string[]    (list of city slugs)
-GET /api/v1/cities/{slug}   → CityData
+GET /api/v1/cities                          → CityListItem[]
+GET /api/v1/cities/{slug}?planning_year=YYYY[&years=Y1,Y2,...]  → CityData
 ```
 
-**Fetch flow** (`src/App.tsx`, `useEffect` on mount):
-1. `fetchCities()` returns an array of slug strings.
-2. `Promise.all(slugs.map(fetchCity))` fetches all cities in parallel.
-3. First city in the list becomes the default selection.
-4. `selectedYears` is initialised to `allCities[0].arrivals.years` (all years for the first city).
+`planning_year` controls which year's holiday occurrences are embedded in the response.
+`years` filters the arrivals data used for crowd index computation on the server.
+
+**Fetch flow** (`src/App.tsx`):
+
+1. On mount: `fetchCities(signal)` fetches `CityListItem[]`. First city becomes the default selection.
+2. On `selectedCitySlug` / `planningYear` / `selectedYears` change: `fetchCity(slug, planningYear, yearsParam, signal)` fetches the selected city's data. This is lazy — only the active city is loaded, not all cities upfront.
+3. Results are cached by `cacheKey = \`${slug}:${planningYear}:${selectedYears.join(',')}\`` in `cityCache: Record<string, CityData>`.
+4. `staleCity` holds the last successfully loaded data; shown at `opacity-40` while re-fetching on param changes so the UI never goes blank.
+5. `selectedYears` is initialised from the first fetched city's `arrivals.years`.
+
+**Deduplication:** `fetchCity` maintains an `inflight: Map<string, Promise<CityData>>` to prevent duplicate concurrent requests for the same key.
 
 **Error handling:**
-- Both `fetchCities` and `fetchCity` throw `Error` on non-OK HTTP status.
-- A top-level `try/catch` in `init()` sets `error` state on failure.
-- On error, the app renders a full-screen red error message and nothing else.
-- There is no retry, no per-city error handling, and no partial loading state.
-
-**The API-provided `monthly_index`** is discarded immediately. `App.tsx` calls `computeMonthlyIndex(city.arrivals.data, selectedYears)` via `useMemo` and replaces `arrivals.monthly_index` in `cityWithDynamicArrivals` before passing it to child components. The API value is never read for rendering.
+- Two separate error states: `initError` (city list fetch failed — fatal, blocks the whole app) and `cityError` (per-city fetch failed — shows an inline error, stale data can still be displayed).
+- Both fetch effects use `AbortController`; component unmount / key change aborts in-flight requests.
 
 ---
 
@@ -141,13 +174,18 @@ GET /api/v1/cities/{slug}   → CityData
 
 ```
 main.tsx
-└── App                          src/App.tsx
-    ├── CitySelector             src/components/CitySelector.tsx
-    ├── YearRangeSelector        src/components/YearRangeSelector.tsx
-    ├── Heatmap                  src/components/Heatmap.tsx
-    │   ├── HolidayBadge (×12)   src/components/HolidayBadge.tsx
-    │   └── HeatmapCell (×60)    src/components/HeatmapCell.tsx
-    └── MonthDetail (conditional) src/components/MonthDetail.tsx
+└── App                              src/App.tsx
+    ├── CitySelector                 src/components/CitySelector.tsx
+    ├── YearRangeSelector            src/components/YearRangeSelector.tsx
+    ├── PlanningYearSelector         src/components/PlanningYearSelector.tsx
+    ├── Heatmap (desktop only)       src/components/Heatmap.tsx
+    │   ├── HolidayBadge (×12)       src/components/HolidayBadge.tsx
+    │   └── HeatmapCell (×60–72)     src/components/HeatmapCell.tsx
+    ├── MobileMonthList (mobile only) src/components/MobileMonthList.tsx
+    │   └── HolidayBadge (per month)
+    └── MonthDetail (conditional)    src/components/MonthDetail.tsx
+        [desktop: full-width card below heatmap]
+        [mobile: bottom sheet with backdrop overlay]
 ```
 
 ---
@@ -156,22 +194,53 @@ main.tsx
 
 **State owned:**
 ```typescript
-cities: CityData[]
+cities: CityListItem[]
+cityCache: Record<string, CityData>     // keyed by slug:planningYear:years
 selectedCitySlug: string
 selectedYears: number[]
+planningYear: number                    // defaults to current calendar year
 selectedMonth: number | null
-loading: boolean
-error: string | null
+initialLoading: boolean                 // city list fetch
+cityLoading: boolean                    // per-city fetch
+initError: string | null
+cityError: string | null
+staleCity: CityData | undefined         // last good data, shown while re-fetching
 ```
 
 **Derived (useMemo):**
 ```typescript
-cityWithDynamicArrivals: CityData | null
-// Replaces arrivals.monthly_index with client-side recomputed index
-// using selectedYears filter.
+cityList: { slug: string; city: string }[]   // mapped from CityListItem[] for CitySelector
+availablePlanningYears: number[]              // union of all occurrence years across cached cities
+monthSummary: { best: string[]; avoid: string[] }  // top-3 / bottom-2 months by overall score
 ```
 
-Renders loading/error screens, then the main layout: header (CitySelector + YearRangeSelector), heatmap area, and conditionally MonthDetail. MonthDetail toggles: clicking the same month again deselects it (`prev === m ? null : m`). Switching cities resets `selectedMonth` to null and `selectedYears` to all years for the new city.
+**Display logic:**
+- `city = cityCache[cacheKey]` — freshly fetched data (may be undefined while loading)
+- `displayCity = city ?? staleCity` — what actually renders; never blank if staleCity exists
+- `isRefetching = !city && !!staleCity && cityLoading` — content shown at `opacity-40 pointer-events-none`
+- `showSkeleton = cityLoading && !displayCity` — animated skeleton shown only on first load
+
+**Loading states:**
+- `initialLoading=true`: full-page animated skeleton (nav + hero + heatmap grid + mobile list)
+- `initError`: centered error with app logo
+- `showSkeleton`: per-city animated skeleton
+- `cityError && !displayCity`: inline error message
+
+**Supplementary effects:**
+- Escape key: closes `selectedMonth`
+- `detailRef`: smooth-scrolls to the detail panel when a month is selected
+- `document.title`: updates to `offpeak — {city.city}` when `displayCity` changes
+
+**City switching (`handleCityChange`):**
+Resets `selectedMonth`. Looks for an exact cache hit for the new slug + current `planningYear`; if found, sets `staleCity` and `selectedYears` immediately (no flash). If no exact match but any cached entry for the slug exists, uses that as `staleCity` while loading. Otherwise sets `cityLoading=true` eagerly so the skeleton shows immediately.
+
+**Layout:**
+- Sticky nav: logo + CitySelector + (desktop) YearRangeSelector + PlanningYearSelector
+- Mobile nav row 2: YearRangeSelector + PlanningYearSelector (scrollable, hidden scrollbar)
+- Hero: large city name + "Best" / "Skip" month chips
+- `max-w-6xl mx-auto px-4` centered content
+- Desktop: `<Heatmap>` + conditional `<MonthDetail>` in a card below
+- Mobile (`lg:hidden`): `<MobileMonthList>` + `<MonthDetail>` as a bottom sheet with backdrop
 
 ---
 
@@ -180,13 +249,14 @@ Renders loading/error screens, then the main layout: header (CitySelector + Year
 **Props:**
 ```typescript
 interface Props {
-  cities: CityData[];
+  cities: { slug: string; city: string }[];
   selected: string;
   onSelect: (slug: string) => void;
+  loadingSlug?: string | null;
 }
 ```
 
-Tab-strip of buttons (one per city). Active city gets `bg-white text-gray-900`; others get `text-gray-400`. Owns no state.
+Tab-strip of buttons. Active city: `bg-slate-800 text-white`; others: `text-slate-500 hover:text-slate-200`. When `loadingSlug` matches a city's slug, an animated dot (`animate-pulse`) appears next to its label. Owns no state.
 
 ---
 
@@ -201,7 +271,22 @@ interface Props {
 }
 ```
 
-Toggle buttons for each available year. Prevents deselecting the last selected year (`selected.length > 1` guard). Owns no state.
+Toggle buttons for each available arrivals year (controls which years' data the server uses for crowd index computation). Prevents deselecting the last year (`selected.length > 1` guard). Active: `bg-teal-800/60 border-teal-700/60 text-teal-300`. Owns no state.
+
+---
+
+### PlanningYearSelector `src/components/PlanningYearSelector.tsx`
+
+**Props:**
+```typescript
+interface Props {
+  years: number[];
+  selected: number;
+  onSelect: (year: number) => void;
+}
+```
+
+Toggle buttons for the planning year (controls which year's holiday `occurrences` are displayed). Available years are derived from all occurrence years across cached cities. Active: `bg-violet-800/60 border-violet-700/60 text-violet-300`. Labelled "Visiting". Owns no state.
 
 ---
 
@@ -211,24 +296,28 @@ Toggle buttons for each available year. Prevents deselecting the last selected y
 ```typescript
 interface Props {
   city: CityData;
+  planningYear: number;
   selectedMonth: number | null;
   onSelectMonth: (month: number) => void;
 }
 ```
 
-**State owned:** none.
+**Desktop only** (`hidden lg:block` in App). Owns no state.
 
 **Derived (useMemo):**
-- `scores`: array of `{ month, overall, comfort, crowds, rain_days, typhoon }` for all 12 months.
-- `valuesByMetric`: `Record<string, number[]>` used to compute relative color scaling per row.
+- `scores`: mapped from `city.monthly_scores` — `{ month, overall, comfort, crowds, rain_days, typhoon }`. `crowds = ms.crowd_index`, `typhoon = ms.typhoon_penalty`, `rain_days` from weather.
+- `valuesByMetric`: `Record<string, number[]>` for per-row color scaling.
+- `cellMatrix`: pre-computed `{ month, bgColor, displayValue }` per metric row × 12 months. For the typhoon row, `displayValue` is the string label (`—`/`Low`/`Mod`/`High`) from `city.weather[i].typhoon_risk`; for all others, the numeric score formatted to 1 decimal if non-integer.
+- `priceRowData`: an array of `{ month, bgColor, displayValue }` for the price row, or `null` if no month has `price_index !== null`. Color-scaled across non-null values only; months without data show `—` on a dark bg.
 
-Renders a CSS grid (`grid-cols-[120px_repeat(12,1fr)]`) with:
-1. Month header buttons (Jan–Dec).
-2. Holiday row: one `HolidayBadge` per month.
-3. Five metric rows (Overall, Comfort, Crowds, Rain Days, Typhoon): one `HeatmapCell` per month.
-4. A color legend bar.
+**Rows rendered:**
+1. Month header buttons (Jan–Dec) — selected state: `text-teal-400`.
+2. Holiday row: one `HolidayBadge` per month, holidays filtered by `getHolidaysForMonth(city.holidays, month, planningYear)`.
+3. Five metric rows via `METRICS` array: Overall, Comfort, Crowds, Rain days, Typhoon.
+4. Price row (conditional) — only when at least one month has pricing data.
+5. Color legend: teal → white → rose gradient.
 
-Month headers and holiday cells are also clickable (call `onSelectMonth`). The typhoon row uses `typhoonRiskToScore` to produce a numeric value for color interpolation but displays the string label (`—`, `Low`, `Mod`, `High`).
+Grid: `grid-cols-[100px_repeat(12,1fr)]`, `min-w-[600px]` forces horizontal scroll on narrow viewports.
 
 ---
 
@@ -239,12 +328,13 @@ Month headers and holiday cells are also clickable (call `onSelectMonth`). The t
 interface Props {
   value: string | number;
   bgColor: string;
+  month: number;
   isSelected: boolean;
-  onClick: () => void;
+  onSelect: (month: number) => void;
 }
 ```
 
-Single cell: fixed height `h-11`, background and text color applied via inline style. Selected state: `border-white scale-105 z-10 shadow-lg`. Owns no state.
+Wrapped in `React.memo`. Single cell: fixed height `h-11`, background and text color applied via inline style. Selected state: `border-teal-400 scale-105 z-10 relative shadow-lg shadow-teal-900/40`. Still a `div` with `onClick` (not a `button`). Owns no state.
 
 ---
 
@@ -257,9 +347,9 @@ interface Props {
 }
 ```
 
-Renders one color-coded pill per holiday for the month. Empty month renders a `h-6` spacer div to maintain row height. Badge label is the impact level (e.g., `V.High`), not the holiday name. Full holiday name + notes appear in the `title` tooltip. Owns no state.
+Empty month: renders a `h-5` spacer div. Non-empty: finds the worst-impact holiday (by `IMPACT_ORDER`) and renders a single pill. If there are multiple holidays, label is `×N`; otherwise the impact label (`Extreme`/`V.High`/`High`/`Mod`/`Low`). Full holiday names in `title` tooltip.
 
-Impact → Tailwind class:
+Impact → Tailwind class (same as before):
 ```typescript
 const IMPACT_STYLES: Record<string, string> = {
   extreme:   'bg-red-600 text-white',
@@ -272,6 +362,28 @@ const IMPACT_STYLES: Record<string, string> = {
 
 ---
 
+### MobileMonthList `src/components/MobileMonthList.tsx`
+
+**Props:**
+```typescript
+interface Props {
+  city: CityData;
+  planningYear: number;
+  selectedMonth: number | null;
+  onSelectMonth: (month: number) => void;
+}
+```
+
+**Mobile only** (`lg:hidden` in App). Renders a vertical list of month cards. Each card shows:
+- Month name + overall score (both colored by `getMetricColor` on the overall score)
+- Temp range (avg_high / avg_low), rain days, crowd label + color
+- Price index delta (e.g. `+12% price` in rose, `-8% price` in teal) — only when `price_index !== null`
+- `HolidayBadge` when holidays exist
+
+Selected card: `bg-slate-800/70 border-slate-700/50 ring-1 ring-teal-500/30` + teal-colored left border. Left border color is always set to the `accentColor` from `getMetricColor`. `div` with `onClick` (not a `button`). Owns no state.
+
+---
+
 ### MonthDetail `src/components/MonthDetail.tsx`
 
 **Props:**
@@ -280,181 +392,74 @@ interface Props {
   city: CityData;
   month: number;
   activeYears: number[];
+  planningYear: number;
   onClose: () => void;
 }
 ```
 
 **State owned:** none.
 
-Fixed-width (`w-72`) right sidebar panel. Sections rendered (conditionally where noted):
-1. Header: month name + city name + close button.
-2. Weather: all `WeatherMonth` fields in a 2-column grid + optional italic notes string.
-3. Scores: comfort (integer) and crowd index (1 decimal). **Does not show the overall score.**
-4. Visitors: bar chart of raw `visitors_thousands` per selected year, filtered to `activeYears`. Section hidden if no data.
-5. Holidays: list with crowd/price/closure impact + notes. Section hidden if none for the month.
-6. Notes: city-level `Note[]` (all notes, not month-specific). Section hidden if `city.notes` is empty.
+Three-column grid on desktop (`lg:grid-cols-3 lg:gap-12`); stacked on mobile.
 
-Notes are city-level — identical content appears regardless of which month is selected.
+**Col 1 — Score:**
+1. Desktop-only header: month name, city · planningYear, close button (SVG `×`).
+2. Large overall score (color-coded: `text-teal-400` ≥ 7.5, `text-slate-100` ≥ 5.5, `text-rose-400` otherwise).
+3. Comfort score (integer) + crowd index (1 decimal) side by side.
+4. Price index block: shows rounded index value + delta vs 100 (e.g. `+12%` in rose / `-8%` in teal / `avg` neutral). Shown as "Price: no data" if `price_index` is null.
 
-`CATEGORY_ICONS` map covers: `visa`, `transport`, `accommodation`, `tips`, `weather`, `aviation`. Unknown categories fall back to `📌`.
+**Col 2 — Weather + Visitors:**
+1. Weather grid (2 columns): High, Low, Feels like, Humidity, Rain days, Rainfall. Typhoon risk shown only if not `'none'` (spans 2 columns, colored by risk level).
+2. Optional weather notes (italic-style, `text-slate-600`).
+3. Visitor trend bar chart — filtered to `activeYears`, sorted by year. Bar is `bg-teal-500/50`; value formatted as `Mk` or `Nk`. Hidden if no data.
+
+**Col 3 — Holidays + Notes:**
+1. Holidays section (title: "Holidays {planningYear}"): lists holidays from `getHolidaysForMonth` filtered to `planningYear`. Each entry shows: holiday name, crowd impact (colored), exact date range from `occurrences`, price/closure impact if not `'none'`, notes. Hidden if none.
+2. Notes section: city-level `Note[]` (identical for every month). Category icons via `CATEGORY_ICONS` map; unknown categories fall back to `📌`. Hidden if `city.notes` is empty.
+
+`formatDate` helper: converts `"YYYY-MM-DD"` to `"Mon D"` (e.g. `"Jan 25"`).
 
 ---
 
 ## 6. Scoring and derived values
 
-All scoring logic is in `src/lib/scoring.ts`. Verbatim:
+**All scoring is server-side.** `src/lib/scoring.ts` no longer exists. The API computes and returns `monthly_scores: MonthScore[]` as part of `CityData`. The client reads scores directly from this array; it does not compute comfort, crowd index, overall score, or holiday penalty.
 
+The `monthly_index` field in `ArrivalsData` is present in the type but is not used for rendering — `crowd_index` in `MonthScore` is used instead.
+
+**`src/lib/holidays.ts`:**
 ```typescript
-export function computeComfortScore(heatIndex: number, rainDays: number): number {
-  let heatPoints: number;
-  if (heatIndex <= 25) heatPoints = 5;
-  else if (heatIndex <= 28) heatPoints = 4;
-  else if (heatIndex <= 31) heatPoints = 3;
-  else if (heatIndex <= 34) heatPoints = 2;
-  else heatPoints = 1;
-
-  let rainPoints: number;
-  if (rainDays <= 7) rainPoints = 5;
-  else if (rainDays <= 12) rainPoints = 4;
-  else if (rainDays <= 16) rainPoints = 3;
-  else if (rainDays <= 20) rainPoints = 2;
-  else rainPoints = 1;
-
-  return heatPoints + rainPoints; // 2–10
-}
-
-export function computeMonthlyIndex(
-  data: ArrivalDataPoint[],
-  selectedYears: number[],
-): { month: number; normalized: number }[] {
-  const filtered = data.filter(d => selectedYears.includes(d.year));
-
-  const byMonth: Record<number, number[]> = {};
-  for (const d of filtered) {
-    (byMonth[d.month] ??= []).push(d.visitors_thousands);
-  }
-
-  const avgs: { month: number; avg: number }[] = [];
-  for (let m = 1; m <= 12; m++) {
-    const vals = byMonth[m] ?? [];
-    avgs.push({ month: m, avg: vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0 });
-  }
-
-  const values = avgs.map(a => a.avg);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return avgs.map(a => ({
-    month: a.month,
-    normalized: Math.round((1 + 9 * (a.avg - min) / range) * 10) / 10,
-  }));
-}
-
-export function getHolidaysForMonth(holidays: Holiday[], month: number): Holiday[] {
-  return holidays.filter(h => {
-    const s = h.typical_month_start;
-    const e = h.typical_month_end;
-    if (s <= e) return month >= s && month <= e;
-    return month >= s || month <= e; // wraps Dec→Jan
-  });
-}
-
-export function getWorstHolidayPenalty(holidays: Holiday[]): number {
-  if (holidays.length === 0) return 0;
-  let worst = 0;
-  for (const h of holidays) {
-    const p = h.crowd_impact === 'extreme' ? 3
-      : h.crowd_impact === 'very_high' ? 2
-      : h.crowd_impact === 'high' ? 2
-      : h.crowd_impact === 'moderate' ? 1 : 0;
-    worst = Math.max(worst, p);
-  }
-  return worst; // 0, 1, 2, 3
-}
-
-// overall = 0.4*comfort + 0.4*(11-crowd) + 0.2*(10-penalty)
-// max: 0.4*10 + 0.4*10 + 0.2*10 = 10
-// min: 0.4*2  + 0.4*1  + 0.2*7  ≈ 2.6
-export function computeOverallScore(
-  comfort: number,        // 2–10
-  crowd: number,          // 1–10
-  holidayPenalty: number, // 0–3 (0=none, 3=extreme)
-): number {
-  const raw = 0.4 * comfort + 0.4 * (11 - crowd) + 0.2 * (10 - holidayPenalty);
-  return Math.round(Math.max(1, Math.min(10, raw)) * 10) / 10;
-}
-
-export function typhoonRiskToScore(risk: string): number {
-  switch (risk) {
-    case 'none':     return 1;
-    case 'low':      return 3;
-    case 'moderate': return 6;
-    case 'high':     return 9;
-    default:         return 1;
-  }
+export function getHolidaysForMonth(holidays: Holiday[], month: number, year: number): Holiday[] {
+  return holidays.filter(h =>
+    h.occurrences
+      .filter(o => o.year === year)
+      .some(({ month_start: s, month_end: e }) => {
+        if (s <= e) return month >= s && month <= e;
+        return month >= s || month <= e; // Dec→Jan wrap
+      })
+  );
 }
 ```
 
-**Notes on scoring:**
-- `high` and `very_high` crowd impact both produce a penalty of 2. They are not distinguished in the overall score.
-- `computeMonthlyIndex` normalises relative to the months in the currently selected year range; the crowd index is relative, not absolute. Changing the year filter recomputes all crowd scores.
-- Colors in each metric row are scaled relative to that row's own min/max (not a fixed scale), so a "good" value is always blue relative to the worst month for that city/metric.
+Filters holidays to those with at least one occurrence in `year` that spans `month`. Year-awareness is required because holidays now have dated occurrences rather than static `typical_month_start/end` fields.
 
-Color logic is in `src/lib/colors.ts`. Verbatim:
+**Color logic** (`src/lib/colors.ts`):
+
+Palette changed to **TealWtRose** (was RdWtBu):
 
 ```typescript
-// RdWtBu diverging palette (color-blind safe)
-// t=0 → blue (good)   t=0.5 → white (neutral)   t=1 → red (bad)
-const BLUE:  [number, number, number] = [69,  117, 180];
+// t=0 → teal-500 (good)   t=0.5 → white (neutral)   t=1 → rose-500 (bad)
+const BLUE:  [number, number, number] = [20,  184, 166]; // teal-500
 const WHITE: [number, number, number] = [247, 247, 247];
-const RED:   [number, number, number] = [215,  48,  39];
-
-function lerp(a: number, b: number, s: number): number {
-  return Math.round(a + (b - a) * s);
-}
-
-export function interpolateColor(t: number): string {
-  const tc = Math.max(0, Math.min(1, t));
-  let r: number, g: number, b: number;
-  if (tc <= 0.5) {
-    const s = tc * 2;
-    r = lerp(BLUE[0], WHITE[0], s);
-    g = lerp(BLUE[1], WHITE[1], s);
-    b = lerp(BLUE[2], WHITE[2], s);
-  } else {
-    const s = (tc - 0.5) * 2;
-    r = lerp(WHITE[0], RED[0], s);
-    g = lerp(WHITE[1], RED[1], s);
-    b = lerp(WHITE[2], RED[2], s);
-  }
-  return `rgb(${r},${g},${b})`;
-}
-
-// Returns background color for a cell value.
-// lowerIsBetter=true means min value → blue (good), max → red (bad).
-export function getMetricColor(
-  value: number,
-  allValues: number[],
-  lowerIsBetter: boolean,
-): string {
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-  const normalized = max === min ? 0.5 : (value - min) / (max - min);
-  const t = lowerIsBetter ? normalized : 1 - normalized;
-  return interpolateColor(t);
-}
-
-export function getTextColor(bgRgb: string): string {
-  const nums = bgRgb.match(/\d+/g);
-  if (!nums || nums.length < 3) return '#111827';
-  const [r, g, b] = nums.map(Number);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.55 ? '#111827' : '#f9fafb';
-}
+const RED:   [number, number, number] = [244,  63,  94]; // rose-500
 ```
 
-Luminance threshold for text contrast: `> 0.55` → dark text (`#111827`), otherwise light text (`#f9fafb`).
+`getMetricColor`, `interpolateColor`, `getTextColor` are unchanged in API. Luminance threshold for text contrast: `> 0.55` → dark text (`#111827`), otherwise light text (`#f9fafb`).
+
+**`src/lib/constants.ts`:**
+```typescript
+export const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+export const MONTH_FULL  = ['January','February',...,'December'];
+```
 
 ---
 
@@ -469,30 +474,27 @@ export default {
 }
 ```
 
-**Global CSS** (`src/index.css`):
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
-No custom CSS rules beyond the three Tailwind directives.
+**Global CSS** (`src/index.css`): only the three Tailwind directives. No custom CSS rules.
 
 **Color palette:**
-- App background: `bg-gray-950`
-- Primary text: `text-gray-100` / `text-white`
-- Secondary text: `text-gray-400` / `text-gray-500`
-- Panel background: `bg-gray-800`
-- City selector background: `bg-gray-800`
-- Active city tab: `bg-white text-gray-900`
-- Active year button: `bg-sky-700 border-sky-500`
-- Visitor bar: `bg-sky-500`
-- Detail panel close button hover: `hover:text-white`
+- App background: `bg-slate-950`
+- Primary text: `text-slate-100` / `text-white`
+- Secondary text: `text-slate-400` / `text-slate-500` / `text-slate-600`
+- Panel / nav background: `bg-slate-900`, `bg-slate-950/90 backdrop-blur-md`
+- Active city tab: `bg-slate-800 text-white`
+- Active year button (YearRangeSelector): `bg-teal-800/60 border-teal-700/60 text-teal-300`
+- Active planning year (PlanningYearSelector): `bg-violet-800/60 border-violet-700/60 text-violet-300`
+- Visitor bar: `bg-teal-500/50`
+- Teal accent (hero bar, best months): `bg-teal-500`, `text-teal-400`
+- Rose accent (skip months, price up): `text-rose-400`, `bg-rose-950/60`
 
-**Heatmap cell colors:** RdWtBu diverging palette via inline `style` attribute (not Tailwind). Blue `rgb(69,117,180)` = best, white `rgb(247,247,247)` = median, red `rgb(215,48,39)` = worst. Text color auto-selected by luminance.
+**Heatmap cell colors:** TealWtRose diverging palette via inline `style`. Teal `rgb(20,184,166)` = best, white `rgb(247,247,247)` = neutral, rose `rgb(244,63,94)` = worst. Text color auto-selected by luminance. Legend gradient: `linear-gradient(to right, rgb(20,184,166), rgb(247,247,247), rgb(244,63,94))`.
 
-**Heatmap grid layout:** `grid-cols-[120px_repeat(12,1fr)]` — fixed 120px label column, equal-width month columns. `min-w-[700px]` on the inner div forces horizontal scroll on narrow viewports.
+**Heatmap grid layout:** `grid-cols-[100px_repeat(12,1fr)]` — fixed 100px label column. `min-w-[600px]` forces horizontal scroll on narrow viewports.
 
-**Selected cell:** `border-white scale-105 z-10 relative shadow-lg` — white border + slight scale.
+**Selected heatmap cell:** `border-teal-400 scale-105 z-10 relative shadow-lg shadow-teal-900/40`.
+
+**MonthDetail layout:** full-width `lg:grid-cols-3` card (desktop) or bottom sheet with backdrop (mobile). No longer a `w-72` right sidebar.
 
 ---
 
@@ -500,9 +502,12 @@ No custom CSS rules beyond the three Tailwind directives.
 
 There is no router. The entire application is a single view. Navigation is purely state-driven:
 
-- **City selection:** clicking a city tab in `CitySelector` updates `selectedCitySlug`, resets `selectedMonth` and `selectedYears`.
-- **Year filter:** clicking year buttons in `YearRangeSelector` toggles years in `selectedYears`, which recomputes crowd scores via `useMemo`.
-- **Month detail panel:** clicking any month column header, holiday cell, or heatmap cell sets `selectedMonth`. Clicking the same month again, or the `×` button in `MonthDetail`, clears it. The panel appears as a `w-72` right column alongside the heatmap.
+- **City selection:** clicking a tab in `CitySelector` calls `handleCityChange`, resets `selectedMonth`, triggers lazy city fetch.
+- **Year filter:** clicking year buttons in `YearRangeSelector` updates `selectedYears`, which changes `cacheKey` and triggers a re-fetch with the new `years=` param.
+- **Planning year:** clicking `PlanningYearSelector` updates `planningYear`, which changes `cacheKey` and triggers a re-fetch with the new `planning_year=` param. Also controls which holiday occurrences are shown.
+- **Month detail panel:**
+  - Desktop: clicking a month column header, holiday cell, or heatmap cell sets `selectedMonth`. The detail panel appears below the heatmap in a `border border-slate-800/60 rounded-2xl` card. Clicking the same month again or pressing Escape deselects.
+  - Mobile: same triggers open a bottom sheet (`fixed inset-x-0 bottom-0`) with a backdrop overlay. Clicking the backdrop also closes it.
 
 There is no URL routing, no browser history integration, and no deep-linkable state.
 
@@ -510,47 +515,49 @@ There is no URL routing, no browser history integration, and no deep-linkable st
 
 ## 9. Architecture decisions
 
+- **Decision: All scoring is server-side.** Reason: scores depend on server-held data and the `planning_year` context; keeping computation on the server keeps the client simple and the formula consistent.
+- **Decision: Lazy per-city fetch (not all-at-once on mount).** Reason: avoids loading data for cities the user may never visit; the city list (`CityListItem[]`) is cheap to fetch, actual data is loaded on demand.
+- **Decision: Cache keyed by `slug:planningYear:years`.** Reason: changing planningYear or year range changes the response content (different holiday occurrences, different crowd index), so each parameter combination is a distinct cache entry.
+- **Decision: Stale-while-revalidate (`displayCity = city ?? staleCity`).** Reason: when planningYear or year range changes, there is still meaningful data to show; opacity-dimming signals re-fetch without a blank screen.
+- **Decision: Two separate loading/error states (`initialLoading`/`cityLoading`, `initError`/`cityError`).** Reason: city-list failure is fatal; per-city failure is recoverable (stale data can still be displayed).
 - **Decision: No router.** Reason: single view with no need for shareable URLs in current scope.
-- **Decision: All state in App.tsx.** Reason: state is shallow and small enough that prop drilling is clear; no global state library was warranted.
-- **Decision: Discard API's `monthly_index` and recompute client-side.** Reason: `monthly_index` must be recomputed when the user changes the year filter. The API-provided value is computed over all years and cannot be reused. The raw `data` array is kept; the index is derived from it.
-- **Decision: `cityWithDynamicArrivals` as a derived value.** Reason: keeps the CityData shape consistent — child components always receive a complete `CityData` and never need to know whether the index was overridden.
-- **Decision: Per-row relative color scaling.** Reason: each metric has different units and ranges; normalising within the row makes the best/worst month visually distinguishable regardless of the absolute range.
-- **Decision: Fetch all cities in parallel on mount.** Reason: simplicity. No lazy loading per city; all data is loaded upfront and switching cities is instant.
-- **Decision: Mobile layout via horizontal scroll.** Reason: `min-w-[700px]` on the heatmap container; no responsive reflow or collapsed views for small screens.
+- **Decision: All state in App.tsx.** Reason: state is shallow and small enough that prop drilling is clear.
+- **Decision: Per-row relative color scaling.** Reason: each metric has different units and ranges; normalising within the row makes best/worst month visually distinguishable regardless of absolute values.
+- **Decision: `MobileMonthList` instead of horizontal-scroll heatmap on mobile.** Reason: the 12-column heatmap grid is not legible on small screens; a vertical card list with summary info is more usable.
+- **Decision: `MonthDetail` as bottom sheet on mobile.** Reason: a fixed right sidebar (`w-72`) compresses the heatmap on narrow viewports; a bottom sheet uses full screen width.
+- **Decision: `HeatmapCell` wrapped in `React.memo`.** Reason: 60–72 cells re-render whenever any state in App changes; memoisation skips unchanged cells.
 - **Decision: `MonthDetail` notes show city-level notes regardless of selected month.** Reason: notes are not month-tagged in the data model (`Note` has `category` and `text`, no `month` field).
 
 ---
 
 ## 10. What is NOT implemented
 
-- No price data column or price score row in the heatmap.
-- No overall score shown in the `MonthDetail` Scores section (only comfort and crowds are displayed there).
-- No filtering or sorting of cities.
 - No URL state / deep links.
-- No mobile-optimised layout (horizontal scroll only).
 - No dark/light mode toggle (dark only).
-- No loading skeleton — full-screen "Loading..." text only.
-- No per-city error recovery — one API failure aborts all data.
-- No offline support or caching.
-- The `typhoon` heatmap row is coloured by a numeric proxy score (1/3/6/9) rather than the actual string label; there is no distinct typhoon score visible to users beyond the cell label.
-- `MonthDetail` does not use `HolidayBadge` — it reimplements crowd labels with emoji strings (`CROWD_LABEL` map) rather than reusing the badge component.
+- No loading skeleton granularity below row level — the animated skeleton is a fixed layout approximation, not derived from actual data shape.
+- No per-city error recovery when stale data exists (error is shown inline but old data remains visible; there is no retry button).
+- No offline support or caching beyond the in-memory `cityCache`.
+- No filtering or sorting of cities.
+- `HeatmapCell` uses a `div` with `onClick` instead of a `button` — not keyboard-navigable.
+- Holiday row cells in `Heatmap` use a `div` with `onClick` instead of a `button`.
+- `MobileMonthList` rows use a `div` with `onClick` instead of a `button`.
+- No `aria-label` or accessibility attributes on heatmap cells, month header buttons, or close buttons (except the mobile sheet close button which has `aria-label="Close"`).
+- `MonthDetail` does not reuse `HolidayBadge` — it renders holidays inline with its own layout.
+- `CATEGORY_ICONS` and `CROWD_LABEL`/`CROWD_COLOR` maps use emoji strings inline — not icon components, not accessible.
+- `tailwind.config.js` has no safelist; any dynamic class construction would be purged in production.
 
 ---
 
 ## 11. Known issues and TODOs
 
-- `high` and `very_high` crowd impact are treated identically in `getWorstHolidayPenalty` (both → penalty 2). The distinction between them has no effect on the overall score.
+- `HolidayBadge` label for `very_high` is `'V.High'` (truncated); the full label `'Very High'` is only visible in `MonthDetail` via `CROWD_LABEL`.
 - Notes in `MonthDetail` are city-level and identical for every month. A user clicking different months sees the same Notes section every time.
-- `MonthDetail` Scores section shows comfort and crowds but not overall, even though overall is the primary heatmap row.
-- No `aria-label` or accessibility attributes on heatmap cells, month header buttons, or the close button.
-- `HeatmapCell` uses a `div` with `onClick` instead of a `button` — not keyboard-navigable.
-- Holiday row cells use a `div` with `onClick` instead of a `button`.
-- `MonthDetail` visitor bar chart: `Math.max(...yearlyVisitors.map(...))` is computed inline in JSX on every render.
-- `MonthDetail` uses emoji characters inline in `CROWD_LABEL` and `CATEGORY_ICONS` maps — not icon components, not accessible.
-- `tailwind.config.js` has no safelist; any dynamic class construction would be purged in production.
-- `HolidayBadge` label for `very_high` is `'V.High'` (truncated); the full label `'Very High'` is only visible in the `MonthDetail` panel via `CROWD_LABEL`.
-- On very narrow viewports the `MonthDetail` panel (`w-72`) wraps below the heatmap only if the parent flex container wraps — it does not, so on screens narrower than ~1000px the panel and heatmap compress against each other.
+- `MonthDetail` col 1 shows comfort as an integer and crowd to 1 decimal — no label indicates the scale (e.g. "/10").
 - No `key` on `Note` items in `MonthDetail`; uses array index `i` as key.
+- `availablePlanningYears` is derived from `cityCache` which initially only contains the first loaded city; years for other cities appear only after those cities are loaded.
+- On very narrow viewports the sticky nav's mobile row 2 uses `overflow-x-auto` with hidden scrollbar; there is no visual affordance that it scrolls.
+- `PlanningYearSelector` years list depends on holiday occurrences in cached cities; if a city has no holidays (or no occurrences), it contributes no years.
+- `HeatmapCell` `onSelect` is passed as a stable `useCallback` ref, but `HolidayBadge` click handlers in `Heatmap` are inline lambdas — those cells cannot benefit from `HeatmapCell`'s `React.memo`.
 
 ---
 
@@ -565,12 +572,16 @@ src/
 │   ├── HeatmapCell.tsx
 │   ├── Heatmap.tsx
 │   ├── HolidayBadge.tsx
+│   ├── MobileMonthList.tsx
 │   ├── MonthDetail.tsx
+│   ├── PlanningYearSelector.tsx
 │   └── YearRangeSelector.tsx
 ├── index.css
 ├── lib/
+│   ├── colors.test.ts
 │   ├── colors.ts
-│   └── scoring.ts
+│   ├── constants.ts
+│   └── holidays.ts
 ├── main.tsx
 └── types.ts
 ```

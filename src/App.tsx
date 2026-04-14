@@ -1,58 +1,106 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { fetchCities, fetchCity } from './api';
-import {
-  computeMonthlyIndex,
-  computeComfortScore,
-  computeOverallScore,
-  getHolidaysForMonth,
-  getWorstHolidayPenalty,
-} from './lib/scoring';
 import CitySelector from './components/CitySelector';
 import YearRangeSelector from './components/YearRangeSelector';
 import PlanningYearSelector from './components/PlanningYearSelector';
 import Heatmap from './components/Heatmap';
 import MobileMonthList from './components/MobileMonthList';
 import MonthDetail from './components/MonthDetail';
-import type { CityData } from './types';
+import type { CityData, CityListItem } from './types';
 import { MONTH_SHORT, MONTH_FULL } from './lib/constants';
 
 export default function App() {
-  const [cities, setCities] = useState<CityData[]>([]);
+  const [cities, setCities] = useState<CityListItem[]>([]);
+  const [cityCache, setCityCache] = useState<Record<string, CityData>>({});
   const [selectedCitySlug, setSelectedCitySlug] = useState<string>('');
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [planningYear, setPlanningYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [cityLoading, setCityLoading] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
+  const [cityError, setCityError] = useState<string | null>(null);
+  // Last successfully loaded data for the current slug — shown while re-fetching
+  // new params so the UI never goes blank on planningYear / year-range changes.
+  const [staleCity, setStaleCity] = useState<CityData | undefined>();
   const detailRef = useRef<HTMLDivElement>(null);
 
-  // ── Data fetching ────────────────────────────────────────────
+  // Ref-sync: lets effects read the latest cache without adding cityCache to deps
+  const cityCacheRef = useRef<Record<string, CityData>>({});
+  cityCacheRef.current = cityCache;
+
+  // Pass selected years directly; empty = backend uses all available years
+  const yearsParam = selectedYears.length > 0 ? selectedYears : undefined;
+  const cacheKey = `${selectedCitySlug}:${planningYear}:${selectedYears.join(',')}`;
+
+  // ── Fetch city list on mount ─────────────────────────────────
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
 
     async function init() {
       try {
-        const slugs = await fetchCities(signal);
-        // allSettled: partial failures don't kill the whole app
-        const results = await Promise.allSettled(slugs.map(s => fetchCity(s, signal)));
-        const allCities = results
-          .filter((r): r is PromiseFulfilledResult<CityData> => r.status === 'fulfilled')
-          .map(r => r.value);
-        if (allCities.length === 0) throw new Error('No city data could be loaded');
-        setCities(allCities);
-        setSelectedCitySlug(allCities[0].slug);
-        setSelectedYears(allCities[0].arrivals.years);
+        const fetchedCities = await fetchCities(signal);
+        if (fetchedCities.length === 0) throw new Error('No cities available');
+        setCities(fetchedCities);
+        setSelectedCitySlug(fetchedCities[0].slug);
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return;
-        setError(e instanceof Error ? e.message : 'Failed to load data');
+        setInitError(e instanceof Error ? e.message : 'Failed to load cities');
       } finally {
-        if (!signal.aborted) setLoading(false);
+        if (!signal.aborted) setInitialLoading(false);
       }
     }
+
     init();
     return () => controller.abort();
   }, []);
+
+  // ── Load city data; re-fetch when slug, planningYear, or year range changes ─
+  useEffect(() => {
+    if (!selectedCitySlug) return;
+
+    if (cityCacheRef.current[cacheKey]) {
+      // Cache hit — ensure selectedYears are populated if this is post-city-switch
+      const cached = cityCacheRef.current[cacheKey];
+      if (selectedYears.length === 0) setSelectedYears(cached.arrivals.years);
+      return;
+    }
+
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    setCityLoading(true);
+    setCityError(null);
+
+    fetchCity(selectedCitySlug, planningYear, yearsParam, signal)
+      .then(data => {
+        if (signal.aborted) return;
+        setCityCache(prev => {
+          const next = { ...prev, [cacheKey]: data };
+          // Pre-warm the all-years key so the second render (after selectedYears
+          // populates) hits the cache instead of triggering another fetch.
+          if (!yearsParam && data.arrivals.years.length > 0) {
+            const allYears = [...data.arrivals.years].sort((a, b) => a - b);
+            const fullKey = `${selectedCitySlug}:${planningYear}:${allYears.join(',')}`;
+            next[fullKey] = data;
+          }
+          return next;
+        });
+        setStaleCity(data);
+        if (selectedYears.length === 0) setSelectedYears(data.arrivals.years);
+        setCityLoading(false);
+      })
+      .catch(e => {
+        if (signal.aborted) return;
+        if (e instanceof Error && e.name === 'AbortError') return;
+        setCityError(e instanceof Error ? e.message : 'Failed to load city data');
+        setCityLoading(false);
+      });
+
+    return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey]);
 
   // ── Escape to close detail ───────────────────────────────────
   useEffect(() => {
@@ -70,58 +118,76 @@ export default function App() {
     }
   }, [selectedMonth]);
 
-  const city = cities.find(c => c.slug === selectedCitySlug);
+  const city = selectedCitySlug ? cityCache[cacheKey] : undefined;
+  // Show stale data while re-fetching so the UI never goes blank on param changes.
+  const displayCity = city ?? staleCity;
+  // True when we're refetching with new params but have old data to show.
+  const isRefetching = !city && !!staleCity && cityLoading;
+  // True only on the very first load for a slug (nothing to show yet).
+  const showSkeleton  = cityLoading && !displayCity;
 
   // ── Dynamic page title ───────────────────────────────────────
   useEffect(() => {
-    document.title = city ? `offpeak — ${city.city}` : 'offpeak';
-  }, [city]);
+    document.title = displayCity ? `offpeak — ${displayCity.city}` : 'offpeak';
+  }, [displayCity]);
+
+  const cityList = useMemo(
+    () => cities.map(c => ({ slug: c.slug, city: c.name })),
+    [cities],
+  );
 
   const availablePlanningYears = useMemo(() => {
     const yearSet = new Set<number>();
-    for (const c of cities) {
-      for (const h of c.holidays) {
+    for (const cityData of Object.values(cityCache)) {
+      for (const h of cityData.holidays) {
         for (const o of h.occurrences) yearSet.add(o.year);
       }
     }
     return Array.from(yearSet).sort();
-  }, [cities]);
-
-  const cityWithDynamicArrivals = useMemo(() => {
-    if (!city) return null;
-    const monthly_index = computeMonthlyIndex(city.arrivals.data, selectedYears);
-    return { ...city, arrivals: { ...city.arrivals, monthly_index } };
-  }, [city, selectedYears]);
+  }, [cityCache]);
 
   const monthSummary = useMemo(() => {
-    if (!cityWithDynamicArrivals) return { best: [] as string[], avoid: [] as string[] };
-    const scored = cityWithDynamicArrivals.weather.map(w => {
-      const comfort = computeComfortScore(w.heat_index_c, w.rain_days);
-      const crowdEntry = cityWithDynamicArrivals.arrivals.monthly_index.find(m => m.month === w.month);
-      const crowd = crowdEntry?.normalized ?? 5;
-      const monthHols = getHolidaysForMonth(cityWithDynamicArrivals.holidays, w.month, planningYear);
-      const penalty = getWorstHolidayPenalty(monthHols);
-      const overall = computeOverallScore(comfort, crowd, penalty);
-      return { month: w.month, overall };
-    }).sort((a, b) => b.overall - a.overall);
-    const best  = scored.slice(0, 3).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
-    const avoid = scored.slice(-2).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
+    if (!displayCity) return { best: [] as string[], avoid: [] as string[] };
+    const sorted = [...displayCity.monthly_scores].sort((a, b) => b.overall - a.overall);
+    const best  = sorted.slice(0, 3).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
+    const avoid = sorted.slice(-2).sort((a, b) => a.month - b.month).map(s => MONTH_SHORT[s.month - 1]);
     return { best, avoid };
-  }, [cityWithDynamicArrivals, planningYear]);
+  }, [displayCity]);
 
   function handleCityChange(slug: string) {
+    if (slug === selectedCitySlug) return;
     setSelectedCitySlug(slug);
     setSelectedMonth(null);
-    const newCity = cities.find(c => c.slug === slug)!;
-    setSelectedYears(newCity.arrivals.years);
+
+    // Look for an exact cache match (same slug + current planningYear).
+    // If found, set years upfront so cacheKey resolves to the cached entry
+    // on the very first render — no re-fetch, no opacity-40 flash.
+    const exactEntry = Object.entries(cityCacheRef.current).find(
+      ([k]) => k.startsWith(`${slug}:${planningYear}:`),
+    );
+    if (exactEntry) {
+      const data = exactEntry[1];
+      setStaleCity(data);
+      setSelectedYears(data.arrivals.years);
+    } else {
+      // No exact match — show any stale data as placeholder while loading.
+      const anyEntry = Object.entries(cityCacheRef.current).find(
+        ([k]) => k.startsWith(`${slug}:`),
+      );
+      setStaleCity(anyEntry?.[1]);
+      setSelectedYears([]);
+      // Eagerly signal loading when there is nothing to show at all, so the
+      // skeleton renders on the first paint instead of a blank frame.
+      if (!anyEntry) setCityLoading(true);
+    }
   }
 
   const handleSelectMonth = useCallback((m: number) => {
     setSelectedMonth(prev => prev === m ? null : m);
   }, []);
 
-  // ── Loading / error states ───────────────────────────────────
-  if (loading) {
+  // ── Initial loading (city list fetch) ────────────────────────
+  if (initialLoading) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 animate-pulse">
         {/* Nav skeleton */}
@@ -212,24 +278,25 @@ export default function App() {
     );
   }
 
-  if (error || !city || !cityWithDynamicArrivals) {
+  // ── Fatal error (city list could not be fetched) ─────────────
+  if (initError) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <div className="text-3xl font-black tracking-tighter text-white mb-3">offpeak</div>
-          <p className="text-rose-400 text-sm">{error ?? 'Something went wrong'}</p>
+          <p className="text-rose-400 text-sm">{initError}</p>
         </div>
       </div>
     );
   }
 
-  const sharedProps = {
-    city: cityWithDynamicArrivals,
+  const sharedProps = displayCity ? {
+    city: displayCity,
     month: selectedMonth!,
     activeYears: selectedYears,
     planningYear,
     onClose: () => setSelectedMonth(null),
-  };
+  } : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -244,89 +311,157 @@ export default function App() {
               beta
             </span>
             <div className="w-px h-4 bg-slate-800 shrink-0" />
-            <CitySelector cities={cities} selected={selectedCitySlug} onSelect={handleCityChange} />
+            <CitySelector
+              cities={cityList}
+              selected={selectedCitySlug}
+              onSelect={handleCityChange}
+              loadingSlug={cityLoading ? selectedCitySlug : null}
+            />
             {/* Desktop only — year selectors stay on the same row */}
-            <div className="ml-auto hidden lg:flex items-center gap-3">
-              <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
+            {displayCity && (
+              <div className="ml-auto hidden lg:flex items-center gap-3">
+                <YearRangeSelector years={displayCity.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
+                <div className="w-px h-4 bg-slate-800 shrink-0" />
+                <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
+              </div>
+            )}
+          </div>
+          {/* Row 2: mobile only — year selectors on their own scrollable row */}
+          {displayCity && (
+            <div className="lg:hidden border-t border-slate-800/40 h-10 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <YearRangeSelector years={displayCity.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
               <div className="w-px h-4 bg-slate-800 shrink-0" />
               <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
             </div>
-          </div>
-          {/* Row 2: mobile only — year selectors on their own scrollable row */}
-          <div className="lg:hidden border-t border-slate-800/40 h-10 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <YearRangeSelector years={city.arrivals.years} selected={selectedYears} onSelect={setSelectedYears} />
-            <div className="w-px h-4 bg-slate-800 shrink-0" />
-            <PlanningYearSelector years={availablePlanningYears} selected={planningYear} onSelect={setPlanningYear} />
-          </div>
+          )}
         </div>
       </nav>
 
       <div className="max-w-6xl mx-auto px-4 pt-10 pb-20">
 
-        {/* ─── City hero ───────────────────────────────────────── */}
-        <div className="flex items-end justify-between gap-4 mb-10">
-          <div className="flex items-stretch gap-4 min-w-0">
-            <div className="w-[3px] rounded-full bg-teal-500 shrink-0 self-stretch" />
-            <h2 className="text-5xl sm:text-6xl font-black tracking-tighter text-white leading-none">
-              {city.city}
-            </h2>
-          </div>
-          <div className="flex flex-col items-end gap-1.5 sm:gap-2 shrink-0 pb-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium hidden sm:block">Best</span>
-              <div className="flex gap-1">
-                {monthSummary.best.map(m => (
-                  <span key={m} className="text-[10px] font-bold text-teal-400 bg-teal-950/60 border border-teal-800/40 px-1.5 sm:px-2 py-0.5 rounded">
-                    {m}
-                  </span>
+        {showSkeleton ? (
+          /* ─── Per-city loading skeleton (first load only) ────── */
+          <div className="animate-pulse">
+            <div className="flex items-end justify-between gap-4 mb-10">
+              <div className="flex items-stretch gap-4 min-w-0">
+                <div className="w-[3px] rounded-full bg-slate-800 self-stretch" />
+                <div className="h-14 sm:h-16 w-56 bg-slate-800 rounded-lg" />
+              </div>
+              <div className="flex flex-col items-end gap-2 shrink-0 pb-1">
+                <div className="flex gap-1">
+                  {[1,2,3].map(i => <div key={i} className="w-9 h-5 bg-slate-800 rounded" />)}
+                </div>
+                <div className="flex gap-1">
+                  {[1,2].map(i => <div key={i} className="w-9 h-5 bg-slate-800 rounded" />)}
+                </div>
+              </div>
+            </div>
+            <div className="hidden lg:block border border-slate-800/60 rounded-xl bg-slate-900/30 overflow-hidden p-5">
+              <div className="min-w-[600px]">
+                <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-1">
+                  <div />
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div key={i} className="h-6 mx-0.5 bg-slate-800 rounded" />
+                  ))}
+                </div>
+                <div className="grid grid-cols-[100px_repeat(12,1fr)] mb-2">
+                  <div className="h-3 w-14 bg-slate-800 rounded self-center" />
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div key={i} className="h-4 mx-0.5 bg-slate-800/50 rounded" />
+                  ))}
+                </div>
+                {[1,2,3,4,5].map(row => (
+                  <div key={row} className="grid grid-cols-[100px_repeat(12,1fr)] mb-px">
+                    <div className="flex flex-col gap-1 justify-center pr-3">
+                      <div className="h-3 w-14 bg-slate-800 rounded" />
+                      <div className="h-2 w-8 bg-slate-800/60 rounded" />
+                    </div>
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <div key={i} className="h-10 mx-px bg-slate-800 rounded" />
+                    ))}
+                  </div>
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium hidden sm:block">Skip</span>
-              <div className="flex gap-1">
-                {monthSummary.avoid.map(m => (
-                  <span key={m} className="text-[10px] font-bold text-rose-400 bg-rose-950/60 border border-rose-800/40 px-1.5 sm:px-2 py-0.5 rounded">
-                    {m}
-                  </span>
-                ))}
+            <div className="lg:hidden space-y-1.5">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="h-16 bg-slate-800/30 rounded-xl border border-l-[3px] border-transparent border-l-slate-700" />
+              ))}
+            </div>
+          </div>
+        ) : cityError && !displayCity ? (
+          /* ─── Per-city error (no stale data to fall back on) ─── */
+          <div className="flex items-center justify-center py-20">
+            <p className="text-rose-400 text-sm">{cityError}</p>
+          </div>
+        ) : displayCity && sharedProps ? (
+          <div className={`transition-opacity duration-200 ${isRefetching ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+            {/* ─── City hero ───────────────────────────────────── */}
+            <div className="flex items-end justify-between gap-4 mb-10">
+              <div className="flex items-stretch gap-4 min-w-0">
+                <div className="w-[3px] rounded-full bg-teal-500 shrink-0 self-stretch" />
+                <h2 className="text-5xl sm:text-6xl font-black tracking-tighter text-white leading-none">
+                  {displayCity.city}
+                </h2>
+              </div>
+              <div className="flex flex-col items-end gap-1.5 sm:gap-2 shrink-0 pb-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium hidden sm:block">Best</span>
+                  <div className="flex gap-1">
+                    {monthSummary.best.map(m => (
+                      <span key={m} className="text-[10px] font-bold text-teal-400 bg-teal-950/60 border border-teal-800/40 px-1.5 sm:px-2 py-0.5 rounded">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-600 uppercase tracking-widest font-medium hidden sm:block">Skip</span>
+                  <div className="flex gap-1">
+                    {monthSummary.avoid.map(m => (
+                      <span key={m} className="text-[10px] font-bold text-rose-400 bg-rose-950/60 border border-rose-800/40 px-1.5 sm:px-2 py-0.5 rounded">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* ─── Desktop: heatmap ────────────────────────────────── */}
-        <div className="hidden lg:block">
-          <Heatmap
-            city={cityWithDynamicArrivals}
-            planningYear={planningYear}
-            selectedMonth={selectedMonth}
-            onSelectMonth={handleSelectMonth}
-          />
-        </div>
-
-        {/* ─── Mobile: month cards ─────────────────────────────── */}
-        <div className="lg:hidden">
-          <MobileMonthList
-            city={cityWithDynamicArrivals}
-            planningYear={planningYear}
-            selectedMonth={selectedMonth}
-            onSelectMonth={handleSelectMonth}
-          />
-        </div>
-
-        {/* ─── Desktop: full-width detail panel ────────────────── */}
-        {selectedMonth !== null && (
-          <div ref={detailRef} className="hidden lg:block mt-6">
-            <div className="border border-slate-800/60 rounded-2xl bg-slate-900/30 p-7">
-              <MonthDetail {...sharedProps} />
+            {/* ─── Desktop: heatmap ────────────────────────────── */}
+            <div className="hidden lg:block">
+              <Heatmap
+                city={displayCity}
+                planningYear={planningYear}
+                selectedMonth={selectedMonth}
+                onSelectMonth={handleSelectMonth}
+              />
             </div>
+
+            {/* ─── Mobile: month cards ─────────────────────────── */}
+            <div className="lg:hidden">
+              <MobileMonthList
+                city={displayCity}
+                planningYear={planningYear}
+                selectedMonth={selectedMonth}
+                onSelectMonth={handleSelectMonth}
+              />
+            </div>
+
+            {/* ─── Desktop: full-width detail panel ────────────── */}
+            {selectedMonth !== null && (
+              <div ref={detailRef} className="hidden lg:block mt-6">
+                <div className="border border-slate-800/60 rounded-2xl bg-slate-900/30 p-7">
+                  <MonthDetail {...sharedProps} />
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* ─── Mobile: bottom sheet ────────────────────────────── */}
-      {selectedMonth !== null && (
+      {selectedMonth !== null && sharedProps !== null && (
         <div className="lg:hidden">
           <div
             className="fixed inset-0 bg-black/70 z-40 backdrop-blur-sm"

@@ -27,6 +27,22 @@ export interface ArrivalsData {
   monthly_index: MonthlyIndex[];
 }
 
+export interface MonthScore {
+  month: number;
+  comfort: number;
+  crowd_index: number;
+  typhoon_penalty: number;
+  holiday_penalty: number;
+  price_index: number | null;
+  price_penalty: number | null;
+  overall: number;
+}
+
+export interface CityListItem {
+  slug: string;
+  name: string;
+}
+
 export interface HolidayOccurrence {
   year: number;
   date_start: string;  // "YYYY-MM-DD"
@@ -57,4 +73,5 @@ export interface CityData {
   arrivals: ArrivalsData;
   holidays: Holiday[];
   notes: Note[];
+  monthly_scores: MonthScore[];
 }
