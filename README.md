@@ -35,4 +35,5 @@ Deployed on Railway via `Dockerfile` + Caddy. Set `BACKEND_URL` env var to the o
 ## Backlog
 
 - add score on month cards
+- one column for mobile version
 - 
