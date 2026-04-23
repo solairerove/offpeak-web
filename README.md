@@ -31,3 +31,8 @@ docker run -p 3000:3000 -e BACKEND_URL=https://your-api-url.railway.app offpeak-
 ## Deploy
 
 Deployed on Railway via `Dockerfile` + Caddy. Set `BACKEND_URL` env var to the offpeak-api service URL.
+
+## Backlog
+
+- add score on month cards
+- 
