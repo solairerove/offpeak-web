@@ -1,0 +1,1878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>offpeak — redesign</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: #f3f1ed;
+  color: #1c1917;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4cfc7; border-radius: 3px; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.22s ease-out; }
+
+/* ── Layout ─────────────────────────────── */
+.main-wrap { max-width: 1080px; margin: 0 auto; padding: 32px 16px 100px; }
+
+/* ── Nav ─────────────────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(243,241,237,0.95); backdrop-filter: blur(14px);
+  border-bottom: 2px solid #0d9488;       /* teal brand line */
+}
+.nav-inner { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+.nav-row1 { height: 52px; display: flex; align-items: center; gap: 10px; }
+.nav-tagline { font-size: 11px; color: #a8a29e; white-space: nowrap; }
+.nav-years { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.nav-row2 { display: none; }
+@media (max-width: 640px) {
+  .nav-years { display: none; }
+  .nav-tagline { display: none; }
+  .nav-row2 { height: 40px; display: flex; align-items: center; gap: 4px; overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none; border-top: 1px solid #ede9e3; }
+  .nav-row2::-webkit-scrollbar { display: none; }
+}
+
+/* ── City dropdown ───────────────────────── */
+.city-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid #e2ded7; border-radius: 10px;
+  padding: 5px 10px 5px 12px; font-family: inherit; font-size: 13px; font-weight: 700;
+  color: #1c1917; cursor: pointer; transition: border-color 0.15s;
+  white-space: nowrap; min-width: 0; max-width: 220px;
+}
+.city-btn:hover { border-color: #0d9488; }
+.city-chevron { font-size: 10px; color: #a8a29e; flex-shrink: 0; transition: transform 0.15s; }
+.city-chevron.open { transform: rotate(180deg); }
+.city-dropdown-wrap { position: relative; }
+.city-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  background: #fff; border: 1px solid #e2ded7; border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12); min-width: 220px; max-width: 280px;
+  z-index: 100; overflow: hidden;
+}
+.city-search {
+  width: 100%; border: none; border-bottom: 1px solid #f3f1ed;
+  padding: 10px 14px; font-family: inherit; font-size: 13px;
+  outline: none; background: #fafaf8; color: #1c1917;
+}
+.city-list { max-height: 280px; overflow-y: auto; padding: 4px; }
+.city-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; color: #1c1917; transition: background 0.1s;
+  font-weight: 500;
+}
+.city-item:hover { background: #f0fdfa; }
+.city-item.active { background: #0d9488; color: #fff; font-weight: 700; }
+.city-item-country { font-size: 11px; opacity: 0.5; }
+
+/* ── Year pills ──────────────────────────── */
+.year-pill {
+  padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  border: none; cursor: pointer; transition: all 0.15s; font-family: inherit;
+  white-space: nowrap; flex-shrink: 0;
+}
+.year-pill.active   { background: #0d9488; color: #fff; }
+.year-pill.past     { background: transparent; color: #a8a29e; }
+.year-pill.future   { background: transparent; color: #a8a29e; }
+.year-pill.current  { background: transparent; color: #a8a29e; }
+.year-pill:hover:not(.active) { background: #f0fdfa; color: #0d9488; }
+.year-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #c4bfb8; white-space: nowrap; padding: 0 4px; }
+
+/* ── Hero ────────────────────────────────── */
+.hero-head { margin-bottom: 16px; }
+.hero-eyebrow { font-size: 11px; font-weight: 700; color: #0d9488; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+.hero-title { font-size: clamp(30px, 5vw, 56px); font-weight: 800; letter-spacing: -1.5px; line-height: 1; color: #1c1917; }
+.hero-sub { margin-top: 6px; font-size: 13px; color: #a8a29e; }
+.hero-card {
+  border-radius: 14px; padding: 12px 14px; text-align: left; cursor: pointer;
+  border: 1.5px solid; transition: box-shadow 0.18s, transform 0.18s;
+  font-family: inherit; width: 152px; flex-shrink: 0;
+}
+.hero-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.10); transform: translateY(-1px); }
+.hero-card-rank { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; margin-bottom: 8px; }
+.hero-card-emoji { font-size: 20px; }
+.hero-card-month { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; margin-top: 4px; }
+.hero-card-verdict { font-size: 12px; font-weight: 700; margin-top: 3px; }
+.hero-card-meta { font-size: 11px; margin-top: 6px; line-height: 1.6; opacity: 0.7; }
+.hero-card-warning { font-size: 10px; font-weight: 600; margin-top: 3px; }
+.skip-strip { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.skip-chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+
+/* ── Browse section ──────────────────────── */
+.section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+/* teal left-bar accent on section titles */
+.section-title {
+  font-size: 15px; font-weight: 700; color: #1c1917;
+  padding-left: 10px; border-left: 3px solid #0d9488;
+}
+.temp-toggle { display: flex; gap: 2px; }
+.temp-btn { padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+.temp-btn.active { background: #0d9488; color: #fff; }
+.temp-btn:not(.active) { background: transparent; color: #a8a29e; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #a8a29e; }
+.legend-dot { width: 9px; height: 9px; border-radius: 3px; }
+
+/* ── Month table ─────────────────────────── */
+.month-table { width: 100%; border-collapse: separate; border-spacing: 0 3px; }
+.month-table thead th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  color: #c4bfb8; padding: 0 10px 6px; text-align: left; white-space: nowrap; border: none;
+}
+.month-row { background: #fff; cursor: pointer; transition: background 0.12s; }
+.month-row td {
+  padding: 9px 10px;
+  border: none;
+  vertical-align: middle;
+}
+.month-row td:first-child {
+  border-left: 3px solid #f3f1ed; border-radius: 10px 0 0 10px; padding-left: 12px;
+}
+.month-row td:last-child { border-radius: 0 10px 10px 0; text-align: right; padding-right:12px; }
+.month-row:hover:not(.month-row-selected) td { background: #f8f7f4; }
+.month-row:hover:not(.month-row-selected) td:first-child { border-left-color: #d4cfc7; }
+.month-row-selected td { background: inherit; }
+.mr-name { font-size: 14px; font-weight: 700; color: #1c1917; letter-spacing: -0.2px; }
+.mr-score { font-size: 13px; font-weight: 800; }
+.mr-temp { font-size: 11px; color: #78716c; white-space: nowrap; }
+.mr-rain { font-size: 11px; color: #a8a29e; white-space: nowrap; }
+.mr-crowd { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.mr-price { font-size: 11px; font-weight: 600; white-space: nowrap; }
+@media (max-width: 640px) {
+  .col-hide-sm { display: none; }
+  .month-table thead th, .month-row td { padding: 10px 8px; }
+  .month-row td:first-child { padding-left: 10px; }
+}
+@media (max-width: 400px) { .col-hide-xs { display: none; } }
+
+/* ── Detail panel (redesigned) ───────────── */
+.detail-panel { background: #fff; border: 1.5px solid #ede9e3; border-radius: 18px; margin-top: 10px; overflow: hidden; }
+
+/* Header: full-width — verdict + big score side by side */
+.detail-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 24px; border-bottom: 1px solid #f3f1ed;
+}
+.detail-header-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.detail-emoji { font-size: 32px; flex-shrink: 0; }
+.detail-month-name { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; line-height: 1; }
+.detail-badges { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.detail-verdict-badge { font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 99px; color: #fff; }
+.detail-warning { font-size: 11px; font-weight: 600; }
+/* Big score on the right of header */
+.detail-score-block { text-align: right; flex-shrink: 0; padding-left: 20px; }
+.detail-score-num { font-size: 34px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.detail-score-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.5; margin-top: 2px; }
+.close-btn { background: none; border: none; cursor: pointer; padding: 6px; color: #a8a29e; font-size: 16px; border-radius: 8px; line-height: 1; transition: color 0.15s; margin-left: 12px; flex-shrink: 0; }
+.close-btn:hover { color: #1c1917; }
+
+/* Two-column body: weather | crowds+cost */
+.detail-body { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #f3f1ed; }
+.detail-col { padding: 18px 22px; border-right: 1px solid #f3f1ed; }
+.detail-col:last-child { border-right: none; }
+/* Full-width events row */
+.detail-events { padding: 18px 22px; }
+
+.col-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #0d9488; margin-bottom: 12px; }
+.weather-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.weather-tile { background: #f8f7f5; border-radius: 9px; padding: 9px 10px; }
+.weather-tile-full { grid-column: 1 / -1; }
+.weather-tile-warn { background: #fee2e2; }
+.wt-label { font-size: 10px; color: #a8a29e; margin-bottom: 2px; }
+.wt-value { font-size: 14px; font-weight: 700; color: #1c1917; }
+.wt-value-warn { color: #dc2626; }
+.bar-row { margin-bottom: 14px; }
+.bar-label-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.bar-label { font-size: 12px; font-weight: 600; color: #1c1917; }
+.bar-value { font-size: 12px; font-weight: 700; }
+.bar-track { height: 7px; background: #f3f1ed; border-radius: 99px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+.bar-ends { display: flex; justify-content: space-between; margin-top: 3px; font-size: 10px; color: #c4bfb8; }
+.holiday-item { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; margin-bottom: 6px; border: 1px solid; }
+.holiday-icon { font-size: 15px; flex-shrink: 0; }
+.holiday-body { flex: 1; min-width: 0; }
+.holiday-name { font-size: 12px; font-weight: 700; color: #1c1917; line-height: 1.3; }
+.holiday-dates { font-size: 11px; color: #78716c; margin-top: 3px; }
+.holiday-impact { font-size: 10px; margin-top: 3px; color: #78716c; }
+.no-holiday { padding: 10px 12px; border-radius: 10px; font-size: 12px; }
+.quick-take { font-size: 13px; color: #57534e; line-height: 1.8; }
+
+/* ── Divider ─────────────────────────────── */
+.divider { height: 1px; background: #e2ded7; margin: 28px 0; }
+
+/* ── Tweaks ──────────────────────────────── */
+.tweaks-panel {
+  position: fixed; bottom: 20px; right: 20px; z-index: 200;
+  background: #fff; border: 1px solid #e2ded7; border-radius: 16px;
+  padding: 18px 20px; width: 250px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.12); font-family: inherit;
+}
+.tweaks-title { font-weight: 700; font-size: 13px; color: #1c1917; margin-bottom: 14px; }
+.tweak-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.tweak-label { font-size: 12px; color: #57534e; }
+
+/* ── Responsive ──────────────────────────── */
+@media (max-width: 900px) {
+  .month-grid { grid-template-columns: repeat(4, 1fr); }
+  .detail-body { grid-template-columns: 1fr; }
+  .detail-body .detail-col { border-right: none; border-bottom: 1px solid #f3f1ed; }
+  .detail-events > div { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+  .main-wrap { padding: 20px 12px 80px; }
+  .nav-row1 { height: 48px; gap: 8px; }
+  .hero-title { letter-spacing: -1px; }
+  .hero-card { width: 130px !important; padding: 10px 12px !important; }
+  .hero-card-month { font-size: 16px !important; }
+  .hero-card-emoji { font-size: 16px !important; }
+  .month-grid { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .month-card { padding: 10px 10px 10px 8px; }
+  .mc-name { font-size: 11px; }
+  .mc-verdict-text { font-size: 12px; }
+  .mc-meta { font-size: 10px; }
+  .detail-header { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+  .detail-score-num { font-size: 28px !important; }
+  .detail-body { grid-template-columns: 1fr; }
+  .detail-body .detail-col { border-right: none; border-bottom: 1px solid #f3f1ed; padding: 14px 16px; }
+  .detail-events { padding: 14px 16px; }
+  .detail-events > div { grid-template-columns: 1fr !important; }
+  .weather-grid { gap: 5px; }
+  .city-btn { max-width: 140px; font-size: 12px; }
+  .skip-strip { flex-wrap: wrap; }
+  .detail-month-name { font-size: 20px; }
+  .detail-emoji { font-size: 24px; }
+}
+@media (max-width: 480px) {
+  .month-grid { grid-template-columns: 1fr !important; }
+  .month-card { flex-direction: row; align-items: center; gap: 10px; padding: 10px 12px 10px 10px; }
+  .mc-sparkline { order: -1; flex-shrink: 0; }
+  .mc-left { flex: 1; min-width: 0; }
+  .mc-meta { min-height: unset; }
+  .mc-footer { min-height: unset; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useEffect, useRef, useCallback } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "showNumbers": false,
+  "tempUnit": "C"
+}/*EDITMODE-END*/;
+
+// ─── Verdict tier colours — MMORPG rarity style ─────────────────────────────
+// red · orange · green · blue · purple
+const TIERS = {
+  5: { label:"Perfect", emoji:"✨", badge:"#7c3aed", bg:"#ede9fe", border:"#c4b5fd", text:"#4c1d95" },
+  4: { label:"Great",   emoji:"👌", badge:"#2563eb", bg:"#dbeafe", border:"#93c5fd", text:"#1e3a8a" },
+  3: { label:"Good",    emoji:"🙂", badge:"#16a34a", bg:"#dcfce7", border:"#86efac", text:"#14532d" },
+  2: { label:"OK",      emoji:"😐", badge:"#ea580c", bg:"#ffedd5", border:"#fdba74", text:"#9a3412" },
+  1: { label:"Avoid",   emoji:"🌧", badge:"#dc2626", bg:"#fee2e2", border:"#fca5a5", text:"#991b1b" },
+};
+
+function verdict(overall, typhoon) {
+  let tier = overall >= 8.5 ? 5 : overall >= 7.0 ? 4 : overall >= 5.5 ? 3 : overall >= 4.0 ? 2 : 1;
+  const t = { ...TIERS[tier], tier };
+  if (typhoon === "high")     t.warning = "⚠️ Typhoon risk";
+  else if (typhoon === "moderate") t.warning = "⛈ Storm season";
+  return t;
+}
+
+// ─── Holiday impact helpers ──────────────────────────────────────────────────
+const IMPACT_RANK   = { extreme:5, very_high:4, high:3, moderate:2, low:1 };
+const IMPACT_LABEL  = { extreme:"Extreme", very_high:"V.High", high:"High", moderate:"Mod", low:"Low" };
+const IMPACT_COLORS = { extreme:"#dc2626", very_high:"#ea580c", high:"#d97706", moderate:"#a16207", low:"#16a34a" };
+const IMPACT_BG     = { extreme:"#fee2e2",  very_high:"#ffedd5",  high:"#fef3c7",  moderate:"#fefce8",  low:"#dcfce7" };
+
+function crowdLabel(idx) {
+  return idx <= 2 ? "Quiet" : idx <= 4 ? "Moderate" : idx <= 6.5 ? "Busy" : idx <= 8.5 ? "Very busy" : "Packed";
+}
+function crowdColor(idx) {
+  return idx > 8 ? "#dc2626" : idx > 6.5 ? "#ea580c" : idx > 4 ? "#ca8a04" : "#059669";
+}
+function weatherEmoji(m) {
+  if (m.typhoon === "high" || m.typhoon === "moderate") return "⛈";
+  if (m.rainDays >= 16) return "🌧";
+  if (m.rainDays >= 10) return "🌤";
+  if (m.high >= 33) return "🌞";
+  return "☀️";
+}
+function fmtTemp(c, unit) {
+  return unit === "F" ? Math.round(c * 9/5 + 32) + "°F" : c + "°C";
+}
+function fmtDateRange(start, end, days) {
+  const fmt = iso => {
+    const [,mm,dd] = iso.split("-");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${months[+mm-1]} ${+dd}`;
+  };
+  if (!end || start === end) return `${fmt(start)} · 1 day`;
+  return `${fmt(start)} – ${fmt(end)} · ${days} day${days !== 1 ? "s" : ""}`;
+}
+
+// ─── City data ───────────────────────────────────────────────────────────────
+const HK_MONTHS = [
+  { m:1,  name:"Jan", high:18, low:13, humidity:72, rainDays:6,  rainfall:33,  feels:16, typhoon:"none",     overall:7.2, comfort:10, crowds:6.9, priceIdx:95,
+    holidays:[{ name:"Lunar New Year", dateStart:"2027-01-28", dateEnd:"2027-02-03", days:7, crowdImpact:"very_high", priceImpact:"high", closureImpact:"significant" }] },
+  { m:2,  name:"Feb", high:17, low:13, humidity:80, rainDays:9,  rainfall:48,  feels:15, typhoon:"none",     overall:5.6, comfort:9,  crowds:9.4, priceIdx:110,
+    holidays:[{ name:"Lunar New Year peak", dateStart:"2027-02-01", dateEnd:"2027-02-07", days:7, crowdImpact:"extreme", priceImpact:"high", closureImpact:"significant" }] },
+  { m:3,  name:"Mar", high:20, low:16, humidity:82, rainDays:11, rainfall:68,  feels:19, typhoon:"none",     overall:6.4, comfort:9,  crowds:8.6, priceIdx:98,  holidays:[] },
+  { m:4,  name:"Apr", high:24, low:20, humidity:84, rainDays:12, rainfall:148, feels:24, typhoon:"none",     overall:6.4, comfort:9,  crowds:8.9, priceIdx:97,
+    holidays:[{ name:"Easter", dateStart:"2027-04-02", dateEnd:"2027-04-05", days:4, crowdImpact:"high", priceImpact:"moderate", closureImpact:"minimal" }] },
+  { m:5,  name:"May", high:28, low:24, humidity:83, rainDays:16, rainfall:292, feels:30, typhoon:"low",      overall:4.2, comfort:4,  crowds:9.4, priceIdx:92,  holidays:[] },
+  { m:6,  name:"Jun", high:30, low:26, humidity:83, rainDays:19, rainfall:394, feels:33, typhoon:"moderate", overall:3.6, comfort:3,  crowds:10,  priceIdx:88,
+    holidays:[{ name:"Dragon Boat Festival", dateStart:"2027-06-09", dateEnd:"2027-06-09", days:1, crowdImpact:"moderate", priceImpact:"low", closureImpact:"none" }] },
+  { m:7,  name:"Jul", high:31, low:27, humidity:83, rainDays:17, rainfall:385, feels:34, typhoon:"moderate", overall:3.6, comfort:3,  crowds:10,  priceIdx:87,  holidays:[] },
+  { m:8,  name:"Aug", high:31, low:27, humidity:82, rainDays:17, rainfall:367, feels:34, typhoon:"high",     overall:5.5, comfort:4,  crowds:5.2, priceIdx:86,  holidays:[] },
+  { m:9,  name:"Sep", high:29, low:25, humidity:79, rainDays:15, rainfall:257, feels:31, typhoon:"high",     overall:7.6, comfort:10, crowds:1.0, priceIdx:89,  holidays:[] },
+  { m:10, name:"Oct", high:26, low:22, humidity:72, rainDays:8,  rainfall:100, feels:26, typhoon:"moderate", overall:6.1, comfort:6,  crowds:5.8, priceIdx:102,
+    holidays:[{ name:"National Day Golden Week", dateStart:"2027-10-01", dateEnd:"2027-10-07", days:7, crowdImpact:"very_high", priceImpact:"high", closureImpact:"minimal" }] },
+  { m:11, name:"Nov", high:22, low:17, humidity:65, rainDays:6,  rainfall:36,  feels:21, typhoon:"none",     overall:9.3, comfort:10, crowds:2.7, priceIdx:105, holidays:[] },
+  { m:12, name:"Dec", high:19, low:14, humidity:64, rainDays:5,  rainfall:26,  feels:17, typhoon:"none",     overall:7.1, comfort:10, crowds:7.2, priceIdx:112,
+    holidays:[{ name:"Christmas & New Year", dateStart:"2027-12-24", dateEnd:"2027-12-31", days:8, crowdImpact:"high", priceImpact:"high", closureImpact:"minimal" }] },
+];
+
+const DN_MONTHS = [
+  { m:1,  name:"Jan", high:24, low:19, humidity:84, rainDays:11, rainfall:96,  feels:23, typhoon:"none",     overall:6.1, comfort:7,  crowds:5.5, priceIdx:95,
+    holidays:[{ name:"Tết preparation", dateStart:"2027-01-22", dateEnd:"2027-01-27", days:6, crowdImpact:"moderate", priceImpact:"moderate", closureImpact:"minimal" }] },
+  { m:2,  name:"Feb", high:25, low:20, humidity:82, rainDays:4,  rainfall:22,  feels:24, typhoon:"none",     overall:7.4, comfort:9,  crowds:7.8, priceIdx:108,
+    holidays:[{ name:"Tết (Vietnamese New Year)", dateStart:"2027-01-28", dateEnd:"2027-02-03", days:7, crowdImpact:"extreme", priceImpact:"high", closureImpact:"significant" }] },
+  { m:3,  name:"Mar", high:28, low:22, humidity:79, rainDays:3,  rainfall:13,  feels:28, typhoon:"none",     overall:8.9, comfort:10, crowds:3.2, priceIdx:100, holidays:[] },
+  { m:4,  name:"Apr", high:32, low:25, humidity:77, rainDays:4,  rainfall:18,  feels:34, typhoon:"none",     overall:8.2, comfort:9,  crowds:4.1, priceIdx:98,
+    holidays:[{ name:"Reunification Day", dateStart:"2027-04-30", dateEnd:"2027-05-01", days:2, crowdImpact:"moderate", priceImpact:"low", closureImpact:"minimal" }] },
+  { m:5,  name:"May", high:35, low:27, humidity:77, rainDays:9,  rainfall:68,  feels:39, typhoon:"none",     overall:6.0, comfort:5,  crowds:6.2, priceIdx:93,  holidays:[] },
+  { m:6,  name:"Jun", high:36, low:28, humidity:73, rainDays:6,  rainfall:42,  feels:40, typhoon:"none",     overall:5.5, comfort:4,  crowds:7.5, priceIdx:88,  holidays:[] },
+  { m:7,  name:"Jul", high:36, low:28, humidity:72, rainDays:7,  rainfall:52,  feels:40, typhoon:"none",     overall:5.3, comfort:4,  crowds:8.0, priceIdx:86,  holidays:[] },
+  { m:8,  name:"Aug", high:35, low:27, humidity:75, rainDays:12, rainfall:108, feels:38, typhoon:"low",      overall:5.0, comfort:4,  crowds:7.5, priceIdx:85,  holidays:[] },
+  { m:9,  name:"Sep", high:31, low:25, humidity:84, rainDays:18, rainfall:350, feels:30, typhoon:"moderate", overall:3.5, comfort:3,  crowds:4.0, priceIdx:84,
+    holidays:[{ name:"Mid-Autumn Festival", dateStart:"2027-09-25", dateEnd:"2027-09-25", days:1, crowdImpact:"low", priceImpact:"low", closureImpact:"none" }] },
+  { m:10, name:"Oct", high:27, low:22, humidity:88, rainDays:22, rainfall:550, feels:26, typhoon:"high",     overall:2.8, comfort:2,  crowds:3.5, priceIdx:82,  holidays:[] },
+  { m:11, name:"Nov", high:25, low:21, humidity:88, rainDays:18, rainfall:310, feels:24, typhoon:"moderate", overall:4.0, comfort:4,  crowds:4.0, priceIdx:88,  holidays:[] },
+  { m:12, name:"Dec", high:24, low:19, humidity:86, rainDays:14, rainfall:180, feels:23, typhoon:"none",     overall:5.8, comfort:6,  crowds:5.0, priceIdx:96,  holidays:[] },
+];
+
+// Generate plausible stub data for additional cities
+function makeMonths(profile) {
+  const { best, worst, typhoon: tyMap, highs, lows, crowds } = profile;
+  const NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return NAMES.map((name, i) => {
+    const m = i + 1;
+    const isBest  = best.includes(m);
+    const isWorst = worst.includes(m);
+    const overall = isBest  ? +(6.8 + Math.random() * 2.2).toFixed(1)
+                  : isWorst ? +(2.5 + Math.random() * 1.8).toFixed(1)
+                  : +(4.5 + Math.random() * 2.0).toFixed(1);
+    const rainDays = isWorst ? 12 + Math.floor(Math.random() * 10) : isBest ? 2 + Math.floor(Math.random() * 6) : 6 + Math.floor(Math.random() * 8);
+    return {
+      m, name, high: highs[i], low: lows[i], humidity: 70 + Math.floor(Math.random() * 20),
+      rainDays, rainfall: rainDays * (8 + Math.floor(Math.random() * 12)),
+      feels: highs[i] - 2 + Math.floor(Math.random() * 5),
+      typhoon: tyMap[i] || "none",
+      overall: Math.min(9.9, overall),
+      comfort: Math.min(10, Math.round(isBest ? 8 + Math.random() * 2 : isWorst ? 1 + Math.random() * 4 : 4 + Math.random() * 4)),
+      crowds: crowds[i],
+      priceIdx: 85 + Math.floor(Math.random() * 40),
+      holidays: [],
+    };
+  });
+}
+
+const CITIES = {
+  "hong-kong":     { city:"Hong Kong",      country:"China SAR 🇭🇰", months: HK_MONTHS },
+  "da-nang":       { city:"Da Nang",         country:"Vietnam 🇻🇳",   months: DN_MONTHS },
+  "tokyo":         { city:"Tokyo",           country:"Japan 🇯🇵",      months: makeMonths({ best:[3,4,5,10,11], worst:[7,8], typhoon:Array(12).fill("none"), highs:[10,11,14,19,23,26,30,32,28,22,16,12], lows:[3,3,6,11,15,19,23,24,20,14,8,4], crowds:[6,5,7,8,7,6,8,7,6,8,7,9] }) },
+  "bangkok":       { city:"Bangkok",         country:"Thailand 🇹🇭",   months: makeMonths({ best:[11,12,1,2], worst:[4,5,9,10], typhoon:Array(12).fill("none"), highs:[33,34,35,37,35,34,33,33,33,33,32,32], lows:[21,22,24,26,26,26,26,26,25,24,22,21], crowds:[7,6,5,4,3,4,5,5,4,5,6,8] }) },
+  "bali":          { city:"Bali",            country:"Indonesia 🇮🇩", months: makeMonths({ best:[5,6,7,8,9], worst:[1,2,12], typhoon:["none","none","none","none","none","none","none","none","none","none","none","none"], highs:[30,29,30,31,31,30,29,29,30,31,31,31], lows:[23,23,23,24,24,23,22,22,23,24,24,23], crowds:[6,5,4,5,7,8,9,9,8,6,5,6] }) },
+  "singapore":     { city:"Singapore",       country:"Singapore 🇸🇬",  months: makeMonths({ best:[2,3,4,5,6], worst:[11,12,1], typhoon:Array(12).fill("none"), highs:[31,32,32,33,33,33,32,32,32,32,31,31], lows:[24,24,25,25,26,26,26,26,25,25,24,24], crowds:[5,5,6,6,7,7,8,7,6,7,8,7] }) },
+  "seoul":         { city:"Seoul",           country:"Korea 🇰🇷",      months: makeMonths({ best:[4,5,9,10], worst:[1,2,7,8], typhoon:["none","none","none","none","none","none","low","low","none","none","none","none"], highs:[2,4,11,18,23,28,30,31,25,18,10,3], lows:[-5,-3,2,8,13,18,22,22,15,7,1,-4], crowds:[4,4,6,8,7,6,7,6,7,7,5,8] }) },
+  "barcelona":     { city:"Barcelona",       country:"Spain 🇪🇸",      months: makeMonths({ best:[5,6,9,10], worst:[7,8,12,1], typhoon:Array(12).fill("none"), highs:[13,14,16,19,23,27,30,30,27,22,17,13], lows:[5,6,8,11,15,19,22,22,19,15,9,6], crowds:[4,4,5,6,7,8,9,9,8,6,4,4] }) },
+  "lisbon":        { city:"Lisbon",          country:"Portugal 🇵🇹",   months: makeMonths({ best:[4,5,6,9,10], worst:[11,12,1,2], typhoon:Array(12).fill("none"), highs:[15,16,18,20,23,27,29,29,27,22,18,15], lows:[8,9,10,12,14,17,19,19,17,14,11,8], crowds:[3,3,4,5,6,7,8,8,7,6,4,3] }) },
+  "maldives":      { city:"Maldives",        country:"Maldives 🇲🇻",   months: makeMonths({ best:[1,2,11,12], worst:[5,6,7,8], typhoon:Array(12).fill("none"), highs:[30,31,32,32,31,30,30,30,30,30,30,30], lows:[25,25,26,27,27,26,26,26,26,26,25,25], crowds:[8,7,5,4,3,2,2,2,3,4,6,8] }) },
+  "phuket":        { city:"Phuket",          country:"Thailand 🇹🇭",   months: makeMonths({ best:[1,2,3,4,12], worst:[5,6,7,8,9], typhoon:Array(12).fill("none"), highs:[32,33,34,34,33,32,32,32,31,32,32,32], lows:[23,24,25,26,26,26,25,25,25,25,24,23], crowds:[8,7,6,5,3,2,2,2,3,4,5,8] }) },
+  "kyoto":         { city:"Kyoto",           country:"Japan 🇯🇵",      months: makeMonths({ best:[3,4,10,11], worst:[7,8], typhoon:Array(12).fill("none"), highs:[9,10,14,20,25,29,33,34,29,23,16,11], lows:[1,2,5,10,15,20,24,25,20,13,7,2], crowds:[5,5,9,9,7,6,7,6,5,8,7,7] }) },
+  "hanoi":         { city:"Hanoi",           country:"Vietnam 🇻🇳",   months: makeMonths({ best:[10,11,3,4], worst:[6,7,8,9], typhoon:["none","none","none","none","none","none","low","low","moderate","moderate","none","none"], highs:[18,20,23,28,33,34,34,33,31,28,23,19], lows:[13,14,16,20,24,26,26,26,24,21,17,14], crowds:[5,6,5,6,5,5,5,4,3,4,5,5] }) },
+  "chiang-mai":    { city:"Chiang Mai",      country:"Thailand 🇹🇭",   months: makeMonths({ best:[11,12,1,2], worst:[3,4,9,10], typhoon:Array(12).fill("none"), highs:[29,32,36,38,35,32,30,30,30,30,29,28], lows:[12,13,18,22,24,25,25,24,24,23,19,13], crowds:[7,6,5,4,3,3,4,4,3,3,5,7] }) },
+  "taipei":        { city:"Taipei",          country:"Taiwan 🇹🇼",     months: makeMonths({ best:[10,11,4,5], worst:[6,7,8,1], typhoon:["none","none","none","none","none","none","high","high","moderate","low","none","none"], highs:[18,18,21,26,30,33,35,34,31,27,23,19], lows:[13,13,15,19,23,26,27,27,25,22,18,14], crowds:[4,4,5,6,6,5,5,5,5,6,5,6] }) },
+  "kuala-lumpur":  { city:"Kuala Lumpur",    country:"Malaysia 🇲🇾",  months: makeMonths({ best:[6,7,2,3], worst:[10,11], typhoon:Array(12).fill("none"), highs:[33,34,34,34,33,33,33,33,33,32,31,32], lows:[24,24,25,25,25,25,25,25,25,24,24,24], crowds:[5,5,5,6,6,6,6,5,5,5,6,7] }) },
+  "osaka":         { city:"Osaka",           country:"Japan 🇯🇵",      months: makeMonths({ best:[3,4,10,11], worst:[6,7,8], typhoon:Array(12).fill("none"), highs:[10,11,14,20,25,29,33,35,29,23,17,12], lows:[2,3,6,11,16,21,25,26,21,14,8,3], crowds:[5,5,8,9,7,6,7,6,5,7,7,7] }) },
+  "istanbul":      { city:"Istanbul",        country:"Turkey 🇹🇷",     months: makeMonths({ best:[4,5,6,9,10], worst:[1,2,12], typhoon:Array(12).fill("none"), highs:[9,10,13,17,22,27,29,29,25,20,15,10], lows:[3,3,5,9,13,17,20,21,17,12,8,4], crowds:[3,4,5,6,7,8,8,7,7,6,4,3] }) },
+  "prague":        { city:"Prague",          country:"Czechia 🇨🇿",    months: makeMonths({ best:[5,6,7,8,9], worst:[11,12,1,2], typhoon:Array(12).fill("none"), highs:[2,4,10,15,20,23,25,25,20,14,7,3], lows:[-3,-2,1,5,10,13,15,14,10,6,2,-2], crowds:[3,3,4,6,7,7,8,8,7,6,4,4] }) },
+  "ho-chi-minh":   { city:"Ho Chi Minh City",country:"Vietnam 🇻🇳",   months: makeMonths({ best:[1,2,3,4,12], worst:[5,6,7,8,9,10,11], typhoon:Array(12).fill("none"), highs:[33,34,35,36,34,32,31,31,31,31,31,32], lows:[21,22,23,24,25,25,25,25,24,24,23,22], crowds:[5,5,4,5,4,4,4,3,3,3,4,6] }) },
+};
+
+// ─── Passport & Visa data ────────────────────────────────────────────────────
+const PASSPORTS = [
+  { id:"US", flag:"🇺🇸", label:"US" },
+  { id:"EU", flag:"🇪🇺", label:"EU" },
+  { id:"UK", flag:"🇬🇧", label:"UK" },
+  { id:"AU", flag:"🇦🇺", label:"AU" },
+  { id:"RU", flag:"🇷🇺", label:"RU" },
+  { id:"CN", flag:"🇨🇳", label:"CN" },
+  { id:"IN", flag:"🇮🇳", label:"IN" },
+  { id:"JP", flag:"🇯🇵", label:"JP" },
+];
+
+// visa-free | visa-on-arrival | e-visa | required | special
+const VISA_DATA = {
+  "hong-kong":    { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"special",   IN:"visa-free",      JP:"visa-free" },
+  "da-nang":      { US:"e-visa",    EU:"e-visa",    UK:"e-visa",    AU:"e-visa",    RU:"e-visa",    CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+  "tokyo":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"n/a" },
+  "bangkok":      { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "bali":         { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "singapore":    { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-free",      JP:"visa-free" },
+  "seoul":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"required",   IN:"required",       JP:"visa-free" },
+  "barcelona":    { US:"visa-free", EU:"n/a",       UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"visa-free" },
+  "lisbon":       { US:"visa-free", EU:"n/a",       UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"visa-free" },
+  "maldives":     { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "phuket":       { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "kyoto":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"n/a" },
+  "hanoi":        { US:"e-visa",    EU:"e-visa",    UK:"e-visa",    AU:"e-visa",    RU:"e-visa",    CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+  "chiang-mai":   { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "taipei":       { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"required",   IN:"visa-free",      JP:"visa-free" },
+  "kuala-lumpur": { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-free",      JP:"visa-free" },
+  "osaka":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"n/a" },
+  "istanbul":     { US:"e-visa",    EU:"visa-free", UK:"e-visa",    AU:"e-visa",    RU:"visa-free", CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+  "prague":       { US:"visa-free", EU:"n/a",       UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"visa-free" },
+  "ho-chi-minh":  { US:"e-visa",    EU:"e-visa",    UK:"e-visa",    AU:"e-visa",    RU:"e-visa",    CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+};
+
+const VISA_CONFIG = {
+  "visa-free":       { label:"Visa-free",        color:"#059669", bg:"#dcfce7", border:"#86efac" },
+  "visa-on-arrival": { label:"On arrival",        color:"#ca8a04", bg:"#fef9c3", border:"#fde047" },
+  "e-visa":          { label:"e-Visa",            color:"#2563eb", bg:"#dbeafe", border:"#93c5fd" },
+  "required":        { label:"Visa required",     color:"#dc2626", bg:"#fee2e2", border:"#fca5a5" },
+  "special":         { label:"Special permit",    color:"#7c3aed", bg:"#ede9fe", border:"#c4b5fd" },
+  "n/a":             { label:"Not applicable",    color:"#a8a29e", bg:"#f3f1ed", border:"#e2ded7" },
+};
+
+function getVisa(citySlug, passportId) {
+  return VISA_DATA[citySlug]?.[passportId] ?? "required";
+}
+
+// ─── Flight price data (null = premium/no data) ──────────────────────────────
+// Index vs baseline 100. Only for cities with data.
+const FLIGHT_DATA = {
+  "hong-kong": [82, 88, 92, 98, 105, 110, 112, 108, 90, 95, 100, 118],
+  "da-nang":   [95, 102, 98, 105, 90, 85, 83, 80, 88, 92, 98, 110],
+};
+
+function getFlightIdx(citySlug, monthIdx) {
+  return FLIGHT_DATA[citySlug]?.[monthIdx] ?? null;
+}
+
+// ─── URL share helpers ────────────────────────────────────────────────────────
+function encodeShare(city, weights, year, passport) {
+  const p = new URLSearchParams({
+    c: city,
+    wc: weights.wCrowd, wp: weights.wPrice, wt: weights.wTyphoon, wh: weights.wHoliday,
+    pb: weights.preferBusy ? 1 : 0,
+    y: year, pp: passport
+  });
+  return `${location.origin}${location.pathname}?${p.toString()}`;
+}
+
+function decodeShare() {
+  const p = new URLSearchParams(location.search);
+  if (!p.has("c")) return null;
+  return {
+    city:     p.get("c"),
+    weights:  { wCrowd:+p.get("wc")||3, wPrice:+p.get("wp")||2, wTyphoon:+p.get("wt")||2,
+                wHoliday:+p.get("wh")||2, preferBusy: p.get("pb")==="1" },
+    year:     +p.get("y") || CURRENT_YEAR + 1,
+    passport: p.get("pp") || "US",
+  };
+}
+
+// ─── Passport Selector ───────────────────────────────────────────────────────
+function PassportSelector({ selected, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = PASSPORTS.find(p => p.id === selected) || PASSPORTS[0];
+
+  useEffect(() => {
+    function onOut(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onOut);
+    return () => document.removeEventListener("mousedown", onOut);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display:"flex", alignItems:"center", gap:5, background:"none",
+          border:"1px solid #e2ded7", borderRadius:10, padding:"4px 9px",
+          fontFamily:"inherit", fontSize:12, fontWeight:700, color:"#1c1917",
+          cursor:"pointer", whiteSpace:"nowrap", transition:"border-color 0.15s" }}
+        title="Select your passport">
+        <span>{current.flag}</span>
+        <span style={{ fontSize:11, color:"#78716c" }}>{current.label}</span>
+        <span style={{ fontSize:9, color:"#a8a29e" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:100,
+          background:"#fff", border:"1px solid #e2ded7", borderRadius:12,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.1)", padding:4, minWidth:110 }}>
+          {PASSPORTS.map(p => (
+            <div key={p.id} onClick={() => { onSelect(p.id); setOpen(false); }}
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px",
+                borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:600,
+                background: selected===p.id ? "#f0fdfa" : "transparent",
+                color: selected===p.id ? "#0d9488" : "#1c1917", transition:"background 0.1s" }}
+              onMouseEnter={e => { if (selected!==p.id) e.currentTarget.style.background="#f8f7f4"; }}
+              onMouseLeave={e => { if (selected!==p.id) e.currentTarget.style.background="transparent"; }}>
+              <span>{p.flag}</span><span>{p.label}</span>
+              {selected===p.id && <span style={{ marginLeft:"auto", fontSize:10, color:"#0d9488" }}>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Visa Badge ───────────────────────────────────────────────────────────────
+function VisaBadge({ citySlug, passport, size="sm" }) {
+  const status = getVisa(citySlug, passport);
+  const cfg = VISA_CONFIG[status] || VISA_CONFIG["required"];
+  const isSm = size === "sm";
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+      fontSize: isSm ? 10 : 11, fontWeight:700,
+      padding: isSm ? "2px 7px" : "4px 10px", borderRadius:99,
+      background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`,
+      whiteSpace:"nowrap" }}>
+      {status === "visa-free" ? "✓" : status === "required" ? "✗" : status === "e-visa" ? "⚡" : status === "visa-on-arrival" ? "🛬" : "●"}
+      {" "}{cfg.label}
+    </span>
+  );
+}
+
+// ─── Share Button ─────────────────────────────────────────────────────────────
+function ShareButton({ city, weights, year, passport }) {
+  const [copied, setCopied] = useState(false);
+  function share() {
+    const url = encodeShare(city, weights, year, passport);
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+  return (
+    <button onClick={share}
+      style={{ display:"flex", alignItems:"center", gap:5, background: copied ? "#f0fdf4" : "none",
+        border:`1px solid ${copied ? "#86efac" : "#e2ded7"}`, borderRadius:10,
+        padding:"4px 10px", fontFamily:"inherit", fontSize:12, fontWeight:600,
+        color: copied ? "#059669" : "#78716c", cursor:"pointer",
+        transition:"all 0.2s", whiteSpace:"nowrap" }}>
+      {copied ? "✓ Copied!" : "⎙ Share"}
+    </button>
+  );
+}
+
+// ─── City Dropdown ─────────────────────────────────────────────────────────
+function CityDropdown({ selected, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+  const cityData = CITIES[selected];
+
+  useEffect(() => {
+    function onClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 50); }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return Object.entries(CITIES).filter(([, d]) => d.city.toLowerCase().includes(q) || d.country.toLowerCase().includes(q));
+  }, [query]);
+
+  return (
+    <div className="city-dropdown-wrap" ref={ref}>
+      <button className="city-btn" onClick={() => { setOpen(o => !o); setQuery(""); }}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{cityData.city}</span>
+        <span className={`city-chevron ${open ? "open" : ""}`}>▾</span>
+      </button>
+      {open && (
+        <div className="city-dropdown fade-up">
+          <input ref={inputRef} className="city-search" placeholder="Search cities…" value={query} onChange={e => setQuery(e.target.value)} />
+          <div className="city-list">
+            {filtered.map(([slug, d]) => (
+              <div key={slug} className={`city-item ${selected === slug ? "active" : ""}`}
+                onClick={() => { onSelect(slug); setOpen(false); setQuery(""); }}>
+                <span>{d.city}</span>
+                <span className="city-item-country">{d.country}</span>
+              </div>
+            ))}
+            {filtered.length === 0 && <div style={{ padding: "12px 10px", fontSize: 12, color: "#a8a29e" }}>No cities found</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Year Selector ──────────────────────────────────────────────────────────
+const CURRENT_YEAR = new Date().getFullYear(); // 2026
+function YearSelector({ selected, onSelect }) {
+  const pastYears = [CURRENT_YEAR - 2, CURRENT_YEAR - 1];
+  const planYears = [CURRENT_YEAR, CURRENT_YEAR + 1, CURRENT_YEAR + 2, CURRENT_YEAR + 3];
+  return (
+    <>
+      <span className="year-label">Past</span>
+      {pastYears.map(y => (
+        <button key={y} className={`year-pill ${selected === y ? "active" : "past"}`} onClick={() => onSelect(y)}>{y}</button>
+      ))}
+      <div style={{ width: 1, height: 16, background: "#e2ded7", flexShrink: 0 }} />
+      <span className="year-label">Plan</span>
+      {planYears.map(y => (
+        <button key={y} className={`year-pill ${selected === y ? "active" : "future"}`} onClick={() => onSelect(y)}>{y}</button>
+      ))}
+    </>
+  );
+}
+
+// ─── Best window detector ────────────────────────────────────────────────────
+function getBestWindow(months, top3Overide) {
+  const top3 = top3Overide
+    ? [...top3Overide].sort((a,b) => a - b)
+    : [...months].sort((a, b) => b.overall - a.overall).slice(0, 3).map(m => m.m).sort((a, b) => a - b);
+  const NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  // Check consecutive pairs (with Dec→Jan wrap)
+  function isConsec(a, b) { return b - a === 1 || (a === 12 && b === 1); }
+  // Try all 3-month windows
+  const all3Consec = isConsec(top3[0], top3[1]) && isConsec(top3[1], top3[2]);
+  if (all3Consec) return `${NAMES[top3[0]-1]}–${NAMES[top3[2]-1]}`;
+  // Try Dec-Jan wrap: e.g. [1, 11, 12]
+  if (top3[0]===1 && top3[1]===11 && top3[2]===12) return "Nov–Jan";
+  if (top3[0]===1 && top3[2]===12 && isConsec(top3[0], top3[1]-11)) return null; // skip ambiguous
+  // Any 2 consecutive
+  for (let i = 0; i < top3.length - 1; i++) {
+    if (isConsec(top3[i], top3[i+1])) return `${NAMES[top3[i]-1]}–${NAMES[top3[i+1]-1]}`;
+  }
+  if (isConsec(top3[top3.length-1], top3[0] + 12)) return `${NAMES[top3[top3.length-1]-1]}–${NAMES[top3[0]-1]}`;
+  return null;
+}
+
+// ─── Best Callout (replaces big hero) ───────────────────────────────────────
+function BestHero({ cityData, onSelectMonth, planningYear, weights }) {
+  const top3sorted = useMemo(() => [...cityData.months].sort((a,b) => computeCustomScore(b,weights) - computeCustomScore(a,weights)).slice(0,3).sort((a,b) => a.m - b.m), [cityData, weights]);
+  const worst3sorted = useMemo(() => [...cityData.months].sort((a,b) => computeCustomScore(a,weights) - computeCustomScore(b,weights)).slice(0,3).sort((a,b) => a.m - b.m), [cityData, weights]);
+  const isHistorical = planningYear < CURRENT_YEAR;
+  const bestWindow = useMemo(() => {
+    const sorted = [...cityData.months].sort((a,b) => computeCustomScore(b,weights)-computeCustomScore(a,weights));
+    return getBestWindow(cityData.months, sorted.slice(0,3).map(m=>m.m));
+  }, [cityData, weights]);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {isHistorical && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fefce8", border:"1px solid #fde047", borderRadius:10, padding:"8px 14px", marginBottom:10 }}>
+          <span style={{ fontSize:12, fontWeight:600, color:"#854d0e" }}>📊 Historical data for {planningYear}</span>
+        </div>
+      )}
+      <div style={{ display:"flex", flexWrap:"wrap", alignItems:"center", gap:10 }}>
+        {bestWindow ? (
+          <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:"#f0fdf4", border:"1.5px solid #86efac", borderRadius:10, padding:"6px 12px" }}>
+            <span style={{ fontSize:13, fontWeight:700, color:"#14532d" }}>Best window: {bestWindow}</span>
+          </div>
+        ) : (
+          <span style={{ fontSize:12, fontWeight:600, color:"#57534e" }}>Best months:</span>
+        )}
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          {!bestWindow && <span style={{ fontSize:12, color:"#a8a29e", marginRight:2 }}></span>}
+          {top3sorted.map(m => {
+            const cs = computeCustomScore(m, weights); const v = verdict(cs, m.typhoon);
+            return (
+              <button key={m.m} onClick={() => onSelectMonth(m.m)} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"4px 10px", borderRadius:8, border:`1.5px solid ${v.border}`, background:v.bg, cursor:"pointer", fontFamily:"inherit" }}>
+                <span style={{ fontSize:12, fontWeight:800, color:v.text }}>{m.name}</span>
+                <span style={{ fontSize:10, fontWeight:700, color:v.badge }}>{computeCustomScore(m, weights).toFixed(1)}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ fontSize:11, color:"#a8a29e" }}>skip:</span>
+          {worst3sorted.map(m => (
+            <button key={m.m} onClick={() => onSelectMonth(m.m)} style={{ fontSize:11, fontWeight:700, padding:"3px 8px", borderRadius:6, background:"#fee2e2", color:"#dc2626", border:"none", cursor:"pointer", fontFamily:"inherit" }}>{m.name}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Custom Scoring ──────────────────────────────────────────────────────────
+function pricePenaltyFn(idx) {
+  if (!idx) return 0;
+  if (idx <= 70) return 0; if (idx <= 90) return 1; if (idx <= 110) return 2;
+  if (idx <= 130) return 3.5; if (idx <= 160) return 5.5; return 8;
+}
+function typhoonPenaltyFn(risk) {
+  return { none:0, low:0.5, moderate:2.0, high:6.0 }[risk] ?? 0;
+}
+function holidayPenaltyFn(holidays) {
+  if (!holidays?.length) return 0;
+  const map = { extreme:3, very_high:2, high:2, moderate:1 };
+  return Math.max(...holidays.map(h => map[h.crowdImpact] || 0));
+}
+function computeCustomScore(month, w) {
+  const { wCrowd, wPrice, wTyphoon, wHoliday, preferBusy } = w;
+  const crowdScore  = preferBusy ? month.crowds : (11 - month.crowds);
+  const priceScore  = 10 - pricePenaltyFn(month.priceIdx);
+  const typhoonScore= 10 - typhoonPenaltyFn(month.typhoon);
+  const holidayScore= 10 - holidayPenaltyFn(month.holidays);
+  const total = wCrowd + wPrice + wTyphoon + wHoliday;
+  if (total === 0) return 5.0;
+  const raw = (wCrowd*crowdScore + wPrice*priceScore + wTyphoon*typhoonScore + wHoliday*holidayScore) / total;
+  return Math.min(10, Math.max(1, Math.round(raw * 10) / 10));
+}
+
+// ─── Presets ──────────────────────────────────────────────────────────────────
+const PRESETS = [
+  { id:"balanced",  label:"Balanced",      icon:"⚖️",  wCrowd:3, wPrice:2, wTyphoon:2, wHoliday:2, preferBusy:false },
+  { id:"budget",    label:"Budget",         icon:"💸",  wCrowd:1, wPrice:8, wTyphoon:1, wHoliday:1, preferBusy:false },
+  { id:"quiet",     label:"Avoid crowds",   icon:"🧘",  wCrowd:8, wPrice:1, wTyphoon:1, wHoliday:2, preferBusy:false },
+  { id:"festival",  label:"Love the vibe",  icon:"🎉",  wCrowd:6, wPrice:1, wTyphoon:1, wHoliday:0, preferBusy:true  },
+  { id:"safe",      label:"Storm-free",     icon:"☀️",  wCrowd:2, wPrice:1, wTyphoon:8, wHoliday:1, preferBusy:false },
+];
+const DEFAULT_WEIGHTS = PRESETS[0];
+
+// ─── Personalize Panel ────────────────────────────────────────────────────────
+function PersonalizePanel({ weights, onChange }) {
+  const [open, setOpen] = useState(false);
+  const activePreset = PRESETS.find(p =>
+    p.wCrowd===weights.wCrowd && p.wPrice===weights.wPrice &&
+    p.wTyphoon===weights.wTyphoon && p.wHoliday===weights.wHoliday &&
+    p.preferBusy===weights.preferBusy
+  )?.id;
+
+  function applyPreset(p) { onChange({ wCrowd:p.wCrowd, wPrice:p.wPrice, wTyphoon:p.wTyphoon, wHoliday:p.wHoliday, preferBusy:p.preferBusy }); }
+  function set(key, val) { onChange({ ...weights, [key]: val }); }
+
+  const sliders = [
+    { key:"wCrowd",   label: weights.preferBusy ? "Lively vibe" : "Avoid crowds", color:"#7c3aed" },
+    { key:"wPrice",   label:"Cheapest time",  color:"#059669" },
+    { key:"wTyphoon", label:"Storm-free",     color:"#0d9488" },
+    { key:"wHoliday", label:"Skip holidays",  color:"#ea580c" },
+  ];
+
+  return (
+    <div style={{ marginBottom:14 }}>
+      {/* Preset chips row */}
+      <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+        <span style={{ fontSize:11, fontWeight:700, color:"#a8a29e", textTransform:"uppercase", letterSpacing:"0.08em", flexShrink:0 }}>Priorities</span>
+        {PRESETS.map(p => (
+          <button key={p.id} onClick={() => { applyPreset(p); setOpen(activePreset !== p.id || !open ? true : !open); }}
+            style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 11px", borderRadius:20, fontFamily:"inherit",
+              fontSize:12, fontWeight:600, cursor:"pointer", transition:"all 0.15s", border:"1.5px solid",
+              background: activePreset===p.id ? "#1c1917" : "#fff",
+              color:       activePreset===p.id ? "#fff" : "#57534e",
+              borderColor: activePreset===p.id ? "#1c1917" : "#e2ded7",
+            }}>
+            <span>{p.icon}</span>{p.label}
+          </button>
+        ))}
+        <button onClick={() => setOpen(o => !o)} style={{ marginLeft:"auto", fontSize:11, fontWeight:600, color:"#0d9488", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 0" }}>
+          {open ? "Hide sliders ▲" : "Customize ▼"}
+        </button>
+      </div>
+
+      {/* Sliders */}
+      {open && (
+        <div style={{ marginTop:12, background:"#fff", border:"1px solid #ede9e3", borderRadius:14, padding:"16px 18px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px" }}>
+          {sliders.map(s => (
+            <div key={s.key}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                <span style={{ fontSize:11, fontWeight:600, color:"#57534e" }}>{s.label}</span>
+                <span style={{ fontSize:11, fontWeight:700, color: weights[s.key]===0 ? "#c4bfb8" : s.color }}>
+                  {weights[s.key]===0 ? "ignore" : ["","low","","medium","","","high","","","","max"][weights[s.key]] || weights[s.key]}
+                </span>
+              </div>
+              <input type="range" min={0} max={10} step={1} value={weights[s.key]}
+                onChange={e => set(s.key, +e.target.value)}
+                style={{ width:"100%", accentColor: s.color, cursor:"pointer" }} />
+            </div>
+          ))}
+          {/* Crowd direction toggle */}
+          <div style={{ gridColumn:"1/-1", display:"flex", alignItems:"center", gap:10, paddingTop:6, borderTop:"1px solid #f3f1ed" }}>
+            <div>
+              <span style={{ fontSize:11, fontWeight:600, color:"#57534e" }}>Crowd preference</span>
+              <div style={{ fontSize:10, color:"#a8a29e", marginTop:1 }}>Changes how the Crowds slider is counted</div>
+            </div>
+            {[{val:false,label:"🧘 Quiet"},{val:true,label:"🎉 Lively"}].map(opt => (
+              <button key={String(opt.val)} onClick={() => set("preferBusy", opt.val)}
+                style={{ fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, cursor:"pointer", fontFamily:"inherit", border:"1.5px solid", transition:"all 0.15s",
+                  background: weights.preferBusy===opt.val ? "#1c1917" : "transparent",
+                  color:       weights.preferBusy===opt.val ? "#fff" : "#78716c",
+                  borderColor: weights.preferBusy===opt.val ? "#1c1917" : "#e2ded7",
+                }}>{opt.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── Month Table Row ─────────────────────────────────────────────────────────
+function MonthRow({ month, isSelected, onSelect, tempUnit, customScore, rankDelta, weights }) {
+  const score = customScore ?? month.overall;
+  const v = verdict(score, month.typhoon);
+  const cCol = crowdColor(month.crowds);
+  const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
+  const priceCol = priceDelta === null ? "#a8a29e" : priceDelta > 10 ? "#dc2626" : priceDelta < -5 ? "#059669" : "#78716c";
+  const priceStr = priceDelta === null ? "—" : priceDelta === 0 ? "avg" : priceDelta > 0 ? `+${priceDelta}%` : `${priceDelta}%`;
+  const hasHoliday = month.holidays && month.holidays.length > 0;
+  const topHoliday = hasHoliday ? month.holidays.reduce((a,b) => (IMPACT_RANK[b.crowdImpact]||0) > (IMPACT_RANK[a.crowdImpact]||0) ? b : a) : null;
+
+  return (
+    <tr className={`month-row ${isSelected ? "month-row-selected" : ""}`} onClick={() => onSelect(month.m)}>
+      <td style={{ borderLeftColor: v.badge, background: isSelected ? v.bg : undefined }}>
+        <span className="mr-name" style={{ color: isSelected ? v.text : undefined }}>{month.name}</span>
+      </td>
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <div style={{ display:"inline-flex", alignItems:"center", gap:3 }}>
+          <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", width:36, height:24, borderRadius:6, background: v.bg, border:`1px solid ${v.border}`, fontSize:12, fontWeight:800, color:v.badge }}>{score.toFixed(1)}</span>
+          {rankDelta > 1 && <span style={{ fontSize:9, fontWeight:800, color:"#059669" }}>▲{rankDelta}</span>}
+          {rankDelta < -1 && <span style={{ fontSize:9, fontWeight:800, color:"#dc2626" }}>▼{Math.abs(rankDelta)}</span>}
+        </div>
+      </td>
+
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <span className="mr-temp">{fmtTemp(month.high, tempUnit)} / {fmtTemp(month.low, tempUnit)}</span>
+      </td>
+      <td className="col-hide-sm" style={{ background: isSelected ? v.bg : undefined }}>
+        <span className="mr-rain" style={{ color: month.rainDays >= 16 ? "#dc2626" : month.rainDays >= 10 ? "#ea580c" : "#a8a29e", fontWeight: month.rainDays >= 10 ? 700 : 400 }}>{month.rainDays}d</span>
+      </td>
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <span className="mr-crowd" style={{ color: cCol }}>{crowdLabel(month.crowds)}</span>
+      </td>
+      <td className="col-hide-sm" style={{ background: isSelected ? v.bg : undefined }}>
+        <span className="mr-price" style={{ color: priceCol }}>{priceStr}</span>
+      </td>
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:4 }}>
+          {month.typhoon !== "none" && (
+            <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:99, background: month.typhoon==="high"?"#fee2e2":"#ffedd5", color: month.typhoon==="high"?"#dc2626":"#ea580c", whiteSpace:"nowrap" }}>
+              {month.typhoon==="high" ? "typhoon" : "storms"}
+            </span>
+          )}
+          {topHoliday && (
+            <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:99, background: IMPACT_BG[topHoliday.crowdImpact], color: IMPACT_COLORS[topHoliday.crowdImpact], whiteSpace:"nowrap" }}>
+              {IMPACT_LABEL[topHoliday.crowdImpact]} holiday
+            </span>
+          )}
+          {isSelected && <span style={{ fontSize:9, color: v.badge }}>▲</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ─── Holiday Impact Tags ─────────────────────────────────────────────────────
+function HolidayTags({ holidays }) {
+  if (!holidays || holidays.length === 0) return null;
+  // Sort by impact severity, show up to 2 tags
+  const sorted = [...holidays].sort((a, b) => (IMPACT_RANK[b.crowdImpact] || 0) - (IMPACT_RANK[a.crowdImpact] || 0));
+  const visible = sorted.slice(0, 2);
+  const extra = sorted.length - visible.length;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 5 }}>
+      {visible.map((h, i) => (
+        <span key={i} style={{
+          fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 99,
+          background: IMPACT_BG[h.crowdImpact] || "#f3f1ed",
+          color: IMPACT_COLORS[h.crowdImpact] || "#78716c",
+          border: `1px solid ${IMPACT_COLORS[h.crowdImpact] || "#e2ded7"}30`,
+          lineHeight: 1.6, whiteSpace: "nowrap",
+        }}>
+          📅 {IMPACT_LABEL[h.crowdImpact] || h.crowdImpact}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span style={{ fontSize: 9, fontWeight: 600, color: "#a8a29e", padding: "1px 5px", lineHeight: 1.6 }}>+{extra}</span>
+      )}
+    </div>
+  );
+}
+
+
+// ─── Bar Row with tooltip ───────────────────────────────────────────────────
+function BarRow({ label, value, valueColor, fill, fillColor, ends, tip }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="bar-row">
+      <div className="bar-label-row">
+        <span className="bar-label" style={{ display:"flex", alignItems:"center", gap:5 }}>
+          {label}
+          <span style={{ position:"relative", display:"inline-block" }}>
+            <button onClick={() => setShow(s => !s)} style={{ width:14, height:14, borderRadius:"50%", background:"#e2ded7", border:"none", cursor:"pointer", fontSize:9, fontWeight:700, color:"#78716c", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"inherit", padding:0, lineHeight:1 }}>?</button>
+            {show && (
+              <div onClick={e => e.stopPropagation()} style={{ position:"absolute", left:0, top:18, zIndex:50, background:"#1c1917", color:"#f3f1ed", borderRadius:10, padding:"10px 12px", width:220, fontSize:11, lineHeight:1.6, boxShadow:"0 4px 20px rgba(0,0,0,0.2)", whiteSpace:"normal" }}>
+                {tip}
+                <button onClick={() => setShow(false)} style={{ marginTop:6, display:"block", background:"none", border:"none", color:"#a8a29e", cursor:"pointer", fontSize:10, fontFamily:"inherit", padding:0 }}>Close</button>
+              </div>
+            )}
+          </span>
+        </span>
+        <span className="bar-value" style={{ color: valueColor }}>{value}</span>
+      </div>
+      <div className="bar-track"><div className="bar-fill" style={{ width:`${fill}%`, background:fillColor }} /></div>
+      {ends && <div className="bar-ends"><span>{ends[0]}</span><span>{ends[1]}</span></div>}
+    </div>
+  );
+}
+
+// ─── Detail Panel ────────────────────────────────────────────────────────────
+function DetailPanel({ month, cityData, citySlug, passport, setPassport, planningYear, onYearChange, tempUnit, onClose }) {
+  const v = verdict(month.overall, month.typhoon);
+  const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
+  const priceLabel = priceDelta === null ? "No data" : priceDelta === 0 ? "Average" : priceDelta > 0 ? `+${priceDelta}% vs avg` : `${priceDelta}% vs avg`;
+  const priceCol = priceDelta === null ? "#a8a29e" : priceDelta > 10 ? "#dc2626" : priceDelta < -5 ? "#059669" : "#78716c";
+  const cCol = crowdColor(month.crowds);
+
+  const quickTake = useMemo(() => {
+    const parts = [];
+    if (v.tier === 5) parts.push(`${month.name} is as good as it gets.`);
+    else if (v.tier === 4) parts.push(`${month.name} is a solid choice.`);
+    else if (v.tier === 3) parts.push(`${month.name} is decent with some trade-offs.`);
+    else if (v.tier === 2) parts.push(`${month.name} has real drawbacks to consider.`);
+    else parts.push(`${month.name} is best skipped if you can.`);
+    if (month.rainDays <= 6) parts.push("Expect mostly sunny days.");
+    else if (month.rainDays >= 16) parts.push(`${month.rainDays} rainy days — pack an umbrella.`);
+    if (month.crowds <= 3) parts.push("You'll have it largely to yourself.");
+    else if (month.crowds >= 9) parts.push("Expect big crowds — book well ahead.");
+    if (month.typhoon === "high") parts.push("Typhoon risk is real — travel insurance is essential.");
+    else if (month.typhoon === "moderate") parts.push("Storm season — check forecasts before you go.");
+    if (month.holidays.length > 0) parts.push("Major holidays mean higher prices and crowds.");
+    return parts.join(" ");
+  }, [month]);
+
+  return (
+    <div className="detail-panel fade-up">
+      {/* ── Header: emoji + month/verdict left, big score right ── */}
+      <div className="detail-header" style={{ background: v.bg, borderBottomColor: v.border }}>
+        <div className="detail-header-left">
+          <span className="detail-emoji">{weatherEmoji(month)}</span>
+          <div>
+            <div className="detail-month-name" style={{ color: v.text }}>{month.name} {planningYear}</div>
+            <div className="detail-badges">
+              <span className="detail-verdict-badge" style={{ background: v.badge }}>{v.label} {v.emoji}</span>
+              {v.warning && <span className="detail-warning" style={{ color: v.text }}>{v.warning}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="detail-score-block">
+          <div className="detail-score-num" style={{ color: v.text }}>{month.overall.toFixed(1)}</div>
+          <div className="detail-score-label" style={{ color: v.text }}>out of 10</div>
+        </div>
+        <button className="close-btn" onClick={onClose}>✕</button>
+      </div>
+
+      {/* ── Two-column body: weather | crowds+cost ── */}
+      <div className="detail-body">
+        {/* Col 1: Weather */}
+        <div className="detail-col">
+          <div className="col-title">Weather</div>
+          {/* Typhoon warning — top if present */}
+          {month.typhoon !== "none" && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, background: month.typhoon==="high"?"#fee2e2":"#ffedd5", borderRadius:9, padding:"8px 12px", marginBottom:10 }}>
+              <span style={{ fontSize:16 }}>{month.typhoon==="high" ? "🌀" : "⛈"}</span>
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color: month.typhoon==="high"?"#dc2626":"#ea580c" }}>
+                  {month.typhoon==="high" ? "High typhoon risk" : "Storm season"}
+                </div>
+                <div style={{ fontSize:10, color:"#78716c", marginTop:1 }}>
+                  {month.typhoon==="high" ? "Travel insurance essential. Check forecasts daily." : "Possible disruptions — monitor forecasts before flying."}
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Temp — hero row */}
+          <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:10 }}>
+            <span style={{ fontSize:28, fontWeight:800, letterSpacing:"-1px", color:"#1c1917" }}>{fmtTemp(month.high, tempUnit)}</span>
+            <span style={{ fontSize:14, color:"#a8a29e", fontWeight:500 }}>/ {fmtTemp(month.low, tempUnit)}</span>
+            <span style={{ fontSize:11, color:"#a8a29e", marginLeft:4 }}>feels {fmtTemp(month.feels, tempUnit)}</span>
+          </div>
+          {/* Rain row */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+              <span style={{ fontSize:11, color:"#78716c", fontWeight:600 }}>Rain days</span>
+              <span style={{ fontSize:12, fontWeight:700, color: month.rainDays>=16?"#dc2626":month.rainDays>=10?"#ea580c":"#1c1917" }}>{month.rainDays} / 31</span>
+            </div>
+            <div style={{ height:5, background:"#f3f1ed", borderRadius:99, overflow:"hidden" }}>
+              <div style={{ height:"100%", borderRadius:99, width:`${(month.rainDays/31)*100}%`, background: month.rainDays>=16?"#dc2626":month.rainDays>=10?"#ea580c":"#0d9488" }} />
+            </div>
+            <div style={{ fontSize:10, color:"#a8a29e", marginTop:3 }}>{month.rainfall}mm total rainfall</div>
+          </div>
+          {/* Humidity */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 0", borderTop:"1px solid #f3f1ed" }}>
+            <span style={{ fontSize:11, color:"#78716c" }}>Humidity</span>
+            <span style={{ fontSize:12, fontWeight:700, color: month.humidity>=80?"#ea580c":month.humidity>=70?"#ca8a04":"#059669" }}>{month.humidity}%</span>
+          </div>
+        </div>
+
+        {/* Col 2: Crowds & cost */}
+        <div className="detail-col">
+          <div className="col-title">Crowds & Cost</div>
+          <BarRow label="Crowd level" value={crowdLabel(month.crowds)} valueColor={cCol}
+            fill={month.crowds*10} fillColor={cCol} ends={["Empty","Packed"]}
+            tip="How busy the destination is this month. Based on flight search volumes, hotel occupancy data, and local holiday calendar. High crowds mean longer queues, fully booked hotels, and a noisier vibe." />
+          {priceDelta !== null && (
+            <BarRow label="Hotel prices" value={priceLabel} valueColor={priceCol}
+              fill={Math.min(100,month.priceIdx)} fillColor={priceDelta>10?"#dc2626":priceDelta<-5?"#059669":"#ca8a04"}
+              ends={["Cheap","Pricey"]}
+              tip="Average hotel price index vs the annual baseline (100 = average). Peaks during holidays and peak travel season. Booking 6–8 weeks ahead helps avoid last-minute surges." />
+          )}
+          {/* Flight prices */}
+          {(() => {
+            const fi = getFlightIdx(citySlug, month.m - 1);
+            if (fi !== null) {
+              const fd = Math.round(fi - 100);
+              const fStr = fd === 0 ? "avg" : fd > 0 ? `+${fd}% vs avg` : `${fd}% vs avg`;
+              const fCol = fd > 10 ? "#dc2626" : fd < -5 ? "#059669" : "#78716c";
+              return (
+                <BarRow label="Flight prices" value={fStr} valueColor={fCol}
+                  fill={Math.min(100, fi)} fillColor={fd>10?"#dc2626":fd<-5?"#059669":"#ca8a04"}
+                  ends={["Cheap","Pricey"]}
+                  tip="Estimated average flight price index for this month vs the annual baseline. Book 6–10 weeks ahead for best fares." />
+              );
+            }
+            return (
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+                background:"#f8f7f5", borderRadius:9, marginBottom:14 }}>
+                <span style={{ fontSize:14 }}>🔒</span>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#1c1917" }}>Flight prices</div>
+                  <div style={{ fontSize:10, color:"#a8a29e" }}>Premium feature — coming soon</div>
+                </div>
+              </div>
+            );
+          })()}
+          {/* Visa */}
+          <div style={{ paddingTop:12, borderTop:"1px solid #f3f1ed" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <span style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.1em", color:"#0d9488" }}>Visa</span>
+              <PassportSelector selected={passport} onSelect={setPassport} />
+            </div>
+            <VisaBadge citySlug={citySlug} passport={passport} size="md" />
+            {getVisa(citySlug, passport) === "required" && (
+              <div style={{ fontSize:10, color:"#a8a29e", marginTop:6 }}>Check your country's embassy for requirements.</div>
+            )}
+            {getVisa(citySlug, passport) === "e-visa" && (
+              <div style={{ fontSize:10, color:"#a8a29e", marginTop:6 }}>Apply online before travel. Usually processed in 1–3 days.</div>
+            )}
+            {getVisa(citySlug, passport) === "visa-on-arrival" && (
+              <div style={{ fontSize:10, color:"#a8a29e", marginTop:6 }}>Available at the airport. Have cash & onward ticket ready.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Full-width events + quick take ── */}
+      <div className="detail-events">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
+          <div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+              <div className="col-title" style={{ margin:0 }}>Events</div>
+              <div style={{ display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
+                {[CURRENT_YEAR-1, CURRENT_YEAR, CURRENT_YEAR+1, CURRENT_YEAR+2, CURRENT_YEAR+3].map(y => (
+                  <button key={y} onClick={() => onYearChange(y)} style={{ padding:"2px 8px", borderRadius:6, fontSize:11, fontWeight:600, border:"1px solid", cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s", background: planningYear===y ? "#0d9488" : "transparent", color: planningYear===y ? "#fff" : "#a8a29e", borderColor: planningYear===y ? "#0d9488" : "#e2ded7" }}>{y}</button>
+                ))}
+              </div>
+            </div>
+            {month.holidays.length === 0 && cityData && !cityData.months.some(m => m.holidays.length > 0) ? (
+              <div style={{ padding:"10px 12px", background:"#f8f7f5", border:"1px solid #e2ded7", borderRadius:10 }}>
+                <span style={{ fontSize:12, color:"#a8a29e" }}>📋 Holiday data coming soon for this city</span>
+              </div>
+            ) : month.holidays.length === 0 ? (
+              <div className="no-holiday" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0" }}>
+                <span style={{ fontSize:13, color:"#166534" }}>✅ No major events — smooth travel</span>
+              </div>
+            ) : month.holidays.map((h, i) => {
+              const impactColor = IMPACT_COLORS[h.crowdImpact] || "#78716c";
+              return (
+                <div key={i} className="holiday-item" style={{ background:"#fffbeb", borderColor:"#fcd34d" }}>
+                  <span className="holiday-icon">📅</span>
+                  <div className="holiday-body">
+                    <div className="holiday-name">{h.name}</div>
+                    <div className="holiday-dates">{fmtDateRange(h.dateStart, h.dateEnd, h.days)}</div>
+                    <div className="holiday-impact">
+                      <span style={{ color:impactColor, fontWeight:700 }}>{h.crowdImpact.replace("_"," ")} crowds</span>
+                      {h.priceImpact !== "none" && <span style={{ color:"#78716c" }}> · {h.priceImpact} prices</span>}
+                      {h.closureImpact !== "none" && <span style={{ color:"#78716c" }}> · {h.closureImpact} closures</span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div>
+            <div className="col-title">Quick take</div>
+            <p className="quick-take">{quickTake}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Heatmap View ────────────────────────────────────────────────────────────
+const DEFAULT_HEATMAP_CITIES = ["hong-kong","tokyo","bali","bangkok","da-nang","lisbon","barcelona","kyoto","singapore","seoul"];
+
+function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempUnit }) {
+  const [visibleCities, setVisibleCities] = useState(() => {
+    const set = new Set(DEFAULT_HEATMAP_CITIES);
+    set.add(selectedCity);
+    return [...set];
+  });
+  const [hovered, setHovered] = useState(null); // {slug, month}
+  const [focusedCell, setFocusedCell] = useState(null); // {slug, month} — inline expand
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const pickerRef = useRef(null);
+  const pickerInputRef = useRef(null);
+
+  useEffect(() => {
+    if (pickerOpen) setTimeout(() => pickerInputRef.current?.focus(), 40);
+  }, [pickerOpen]);
+
+  useEffect(() => {
+    function onClickOut(e) { if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(false); }
+    document.addEventListener("mousedown", onClickOut);
+    return () => document.removeEventListener("mousedown", onClickOut);
+  }, []);
+
+  // Keep selected city always visible
+  useEffect(() => {
+    setVisibleCities(prev => prev.includes(selectedCity) ? prev : [selectedCity, ...prev]);
+  }, [selectedCity]);
+
+  const orderedCities = useMemo(() => {
+    const rest = visibleCities.filter(s => s !== selectedCity);
+    return [selectedCity, ...rest];
+  }, [visibleCities, selectedCity]);
+
+  function removeCity(slug) {
+    if (slug === selectedCity) return;
+    setVisibleCities(prev => prev.filter(s => s !== slug));
+    if (focusedCell?.slug === slug) setFocusedCell(null);
+  }
+
+  function addCity(slug) {
+    setVisibleCities(prev => prev.includes(slug) ? prev : [...prev, slug]);
+    setPickerOpen(false);
+    setPickerQuery("");
+  }
+
+  const pickerFiltered = useMemo(() => {
+    const q = pickerQuery.toLowerCase();
+    return Object.entries(CITIES).filter(([slug, d]) =>
+      !visibleCities.includes(slug) &&
+      (d.city.toLowerCase().includes(q) || d.country.toLowerCase().includes(q))
+    );
+  }, [pickerQuery, visibleCities]);
+
+  const CELL_H = 40;
+  const LABEL_W = 136;
+
+  // Color interpolation: score 1–10 → oklch gradient
+  function scoreToColor(score, tier) {
+    const t = TIERS[tier];
+    // Return badge color with opacity based on score intensity
+    return t.badge;
+  }
+
+  function scoreToOpacity(score) {
+    return 0.12 + (score / 10) * 0.88;
+  }
+
+  return (
+    <div>
+      {/* City picker — compact tag row + Add button */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+        <span style={{ fontSize:11, fontWeight:700, color:"#a8a29e", textTransform:"uppercase", letterSpacing:"0.08em", flexShrink:0 }}>Compare</span>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:4, alignItems:"center" }}>
+          {orderedCities.map(slug => {
+            const d = CITIES[slug]; if (!d) return null;
+            const isCurrent = slug === selectedCity;
+            return (
+              <div key={slug} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 8px 3px 10px",
+                borderRadius:20, fontSize:11, fontWeight:700,
+                background: isCurrent ? "#0d9488" : "#1c1917",
+                color:"#fff", border:"none" }}>
+                <span>{d.city}</span>
+                {!isCurrent && (
+                  <button onClick={() => removeCity(slug)}
+                    style={{ background:"rgba(255,255,255,0.25)", border:"none", borderRadius:"50%",
+                      width:14, height:14, cursor:"pointer", color:"#fff", fontSize:10, lineHeight:1,
+                      display:"flex", alignItems:"center", justifyContent:"center", padding:0, fontFamily:"inherit" }}>
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {/* Add city button */}
+          <div style={{ position:"relative" }} ref={pickerRef}>
+            <button onClick={() => setPickerOpen(o => !o)}
+              style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 10px",
+                borderRadius:20, fontSize:11, fontWeight:700, border:"1.5px dashed #d4cfc7",
+                background:"#fff", color:"#a8a29e", cursor:"pointer", fontFamily:"inherit",
+                transition:"all 0.12s" }}>
+              ＋ Add city
+            </button>
+            {pickerOpen && (
+              <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:100,
+                background:"#fff", border:"1px solid #e2ded7", borderRadius:14,
+                boxShadow:"0 8px 32px rgba(0,0,0,0.12)", width:220, overflow:"hidden" }}>
+                <input ref={pickerInputRef} value={pickerQuery} onChange={e => setPickerQuery(e.target.value)}
+                  placeholder="Search cities…"
+                  style={{ width:"100%", border:"none", borderBottom:"1px solid #f3f1ed",
+                    padding:"9px 14px", fontSize:12, fontFamily:"inherit", outline:"none",
+                    background:"#fafaf8", color:"#1c1917" }} />
+                <div style={{ maxHeight:220, overflowY:"auto", padding:4 }}>
+                  {pickerFiltered.length === 0
+                    ? <div style={{ padding:"10px 12px", fontSize:12, color:"#a8a29e" }}>No more cities</div>
+                    : pickerFiltered.map(([slug, d]) => (
+                      <div key={slug} onClick={() => addCity(slug)}
+                        style={{ padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:12,
+                          fontWeight:500, color:"#1c1917", display:"flex", justifyContent:"space-between",
+                          alignItems:"center", transition:"background 0.1s" }}
+                        onMouseEnter={e => e.currentTarget.style.background="#f0fdfa"}
+                        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                        <span>{d.city}</span>
+                        <span style={{ fontSize:10, color:"#a8a29e" }}>{d.country.split(" ").pop()}</span>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div style={{ overflowX:"auto" }}>
+        <div style={{ minWidth: LABEL_W + 12 * 52 }}>
+
+          {/* Month header row */}
+          <div style={{ display:"flex", marginBottom:4, paddingLeft:LABEL_W }}>
+            {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((mo, i) => (
+              <div key={i} style={{ flex:1, textAlign:"center", fontSize:10, fontWeight:700,
+                color:"#a8a29e", letterSpacing:"0.04em", minWidth:44 }}>
+                {mo}
+              </div>
+            ))}
+          </div>
+
+          {/* City rows */}
+          {orderedCities.map(slug => {
+            const d = CITIES[slug];
+            if (!d) return null;
+            const isCurrent = slug === selectedCity;
+            return (
+              <div key={slug} style={{ display:"flex", alignItems:"center", marginBottom:3 }}>
+                {/* City label */}
+                <div style={{ width:LABEL_W, flexShrink:0, paddingRight:10, display:"flex", alignItems:"center", gap:6 }}>
+                  <button onClick={() => onSelectCity(slug)}
+                    style={{ background:"none", border:"none", cursor:"pointer", textAlign:"left",
+                      padding:"2px 0", fontFamily:"inherit", flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight: isCurrent ? 800 : 600,
+                      color: isCurrent ? "#0d9488" : "#1c1917",
+                      whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {d.city}
+                    </div>
+                    <div style={{ fontSize:9, color:"#c4bfb8", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {d.country}
+                    </div>
+                  </button>
+                  {isCurrent && <div style={{ width:3, height:24, borderRadius:99, background:"#0d9488", flexShrink:0 }} />}
+                </div>
+
+                {/* Month cells */}
+                {d.months.map((m, i) => {
+                  const score = computeCustomScore(m, weights);
+                  const v = verdict(score, m.typhoon);
+                  const isHov = hovered?.slug===slug && hovered?.month===m.m;
+                  const isSelected = isCurrent && false; // handled by row highlight
+
+                  return (
+                    <div key={m.m} style={{ flex:1, minWidth:44, height:CELL_H, margin:"0 1.5px",
+                      borderRadius:6, position:"relative", overflow:"hidden", cursor:"pointer",
+                      background: v.bg,
+                      border: (focusedCell?.slug===slug && focusedCell?.month===m.m) ? `2px solid ${v.badge}` : isHov ? `2px solid ${v.badge}88` : `2px solid transparent`,
+                      transition:"border-color 0.1s, transform 0.1s",
+                      transform: isHov ? "scaleY(1.06)" : "scaleY(1)" }}
+                      onClick={() => setFocusedCell(fc => fc?.slug===slug && fc?.month===m.m ? null : {slug, month:m.m})}
+                      onMouseEnter={() => setHovered({ slug, month:m.m })}
+                      onMouseLeave={() => setHovered(null)}>
+                      {/* Color fill */}
+                      <div style={{ position:"absolute", inset:0,
+                        background: v.badge,
+                        opacity: scoreToOpacity(score),
+                        borderRadius:4 }} />
+                      {/* Score label */}
+                      <div style={{ position:"absolute", inset:0, display:"flex",
+                        alignItems:"center", justifyContent:"center",
+                        fontSize:11, fontWeight:800,
+                        color: score >= 6 ? "#fff" : v.text,
+                        letterSpacing:"-0.3px", pointerEvents:"none",
+                        textShadow: score >= 6 ? "0 1px 3px rgba(0,0,0,0.2)" : "none" }}>
+                        {score.toFixed(1)}
+                      </div>
+                      {/* Event dot */}
+                      {m.holidays?.length > 0 && (
+                        <div style={{ position:"absolute", top:3, right:4, width:5, height:5,
+                          borderRadius:"50%", background:"#fff", opacity:0.9 }} />
+                      )}
+                      {m.typhoon !== "none" && (
+                        <div style={{ position:"absolute", bottom:2, right:3, fontSize:8, lineHeight:1, opacity:0.85 }}>
+                          {m.typhoon==="high"?"🌀":"⛈"}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Hover tooltip — fixed height to prevent layout shift */}
+      {(() => {
+        const d = hovered ? CITIES[hovered.slug] : null;
+        const m = d ? d.months[hovered.month - 1] : null;
+        const score = m ? computeCustomScore(m, weights) : 0;
+        const v = m ? verdict(score, m.typhoon) : null;
+        return (
+          <div style={{ marginTop:10, height:40, borderRadius:12, overflow:"hidden",
+            background: hovered ? "#1c1917" : "transparent",
+            transition:"background 0.15s", display:"flex", alignItems:"center",
+            padding: hovered ? "0 16px" : "0", gap:16, flexWrap:"nowrap" }}>
+            {hovered && d && m && v && <>
+              <span style={{ fontWeight:800, fontSize:13, color:"#f3f1ed", whiteSpace:"nowrap" }}>{d.city}</span>
+              <span style={{ color:"#555", flexShrink:0 }}>·</span>
+              <span style={{ fontWeight:700, fontSize:13, color:"#f3f1ed", whiteSpace:"nowrap" }}>{m.name}</span>
+              <span style={{ color:v.badge, fontWeight:700, fontSize:12, whiteSpace:"nowrap" }}>{v.label} {score.toFixed(1)}/10</span>
+              <span style={{ color:"#a8a29e", fontSize:12, whiteSpace:"nowrap" }}>{fmtTemp(m.high,tempUnit)}/{fmtTemp(m.low,tempUnit)}</span>
+              <span style={{ color: m.rainDays>=16?"#f87171":"#6b7280", fontSize:12, whiteSpace:"nowrap" }}>{m.rainDays}d rain</span>
+              <span style={{ color: crowdColor(m.crowds), fontSize:12, whiteSpace:"nowrap" }}>{crowdLabel(m.crowds)}</span>
+              {m.holidays?.length > 0 && <span style={{ color:"#fbbf24", fontSize:12, whiteSpace:"nowrap" }}>📅 {m.holidays[0].name}</span>}
+              {m.typhoon!=="none" && <span style={{ color:"#fb923c", fontSize:12, whiteSpace:"nowrap" }}>{m.typhoon==="high"?"🌀 Typhoon":"⛈ Storms"}</span>}
+              <span style={{ color:"#555", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>click to open →</span>
+            </>}
+          </div>
+        );
+      })()}
+
+      {/* Inline focused cell expand */}
+      {focusedCell && (() => {
+        const fd = CITIES[focusedCell.slug];
+        if (!fd) return null;
+        const fm = fd.months[focusedCell.month - 1];
+        const fscore = computeCustomScore(fm, weights);
+        const fv = verdict(fscore, fm.typhoon);
+        const priceDelta = fm.priceIdx ? Math.round(fm.priceIdx - 100) : null;
+        const priceStr = priceDelta === null ? "—" : priceDelta === 0 ? "avg" : priceDelta > 0 ? `+${priceDelta}%` : `${priceDelta}%`;
+        const priceCol = priceDelta === null ? "#a8a29e" : priceDelta > 10 ? "#dc2626" : priceDelta < -5 ? "#059669" : "#78716c";
+        return (
+          <div style={{ marginTop:10, background:fv.bg, border:`1.5px solid ${fv.border}`, borderRadius:14,
+            padding:"14px 18px", display:"flex", alignItems:"center", gap:20, flexWrap:"wrap",
+            animation:"fadeUp 0.15s ease-out" }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:800, color:fv.text }}>{fd.city} · {fm.name}</div>
+              <div style={{ fontSize:11, color:fv.badge, fontWeight:700, marginTop:2 }}>{fv.label} {fv.emoji} {fscore.toFixed(1)}/10</div>
+            </div>
+            <div style={{ width:1, height:36, background:fv.border }} />
+            <div style={{ fontSize:12, color:"#57534e" }}>
+              <span style={{ fontWeight:700, color:"#1c1917" }}>{fmtTemp(fm.high, tempUnit)}</span>
+              <span style={{ color:"#a8a29e" }}>/{fmtTemp(fm.low, tempUnit)}</span>
+              <span style={{ color:"#a8a29e", marginLeft:6 }}>{fm.rainDays}d rain</span>
+            </div>
+            <div style={{ fontSize:12, fontWeight:700, color:crowdColor(fm.crowds) }}>{crowdLabel(fm.crowds)}</div>
+            {priceDelta !== null && <div style={{ fontSize:12, fontWeight:700, color:priceCol }}>Hotels {priceStr}</div>}
+            {fm.holidays?.length > 0 && <div style={{ fontSize:12, color:"#92400e" }}>📅 {fm.holidays[0].name}</div>}
+            {fm.typhoon !== "none" && <div style={{ fontSize:12, color: fm.typhoon==="high"?"#dc2626":"#ea580c" }}>{fm.typhoon==="high"?"🌀 Typhoon risk":"⛈ Storm season"}</div>}
+            <button onClick={() => { onSelectCity(focusedCell.slug); onSelectMonth(focusedCell.month); setFocusedCell(null); }}
+              style={{ marginLeft:"auto", fontSize:11, fontWeight:700, padding:"5px 14px", borderRadius:8,
+                background:fv.badge, color:"#fff", border:"none", cursor:"pointer", fontFamily:"inherit" }}>
+              Open full detail →
+            </button>
+            <button onClick={() => setFocusedCell(null)}
+              style={{ background:"none", border:"none", cursor:"pointer", color:fv.text, fontSize:14,
+                fontFamily:"inherit", padding:"2px 4px", opacity:0.5 }}>✕</button>
+          </div>
+        );
+      })()}
+
+      {/* Heatmap legend */}
+      <div style={{ display:"flex", gap:14, marginTop:12, alignItems:"center", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:3, alignItems:"center" }}>
+          {[1,2,3,4,5,6,7,8,9,10].map(s => {
+            const tier = s>=8.5?5:s>=7?4:s>=5.5?3:s>=4?2:1;
+            return <div key={s} style={{ width:18, height:12, borderRadius:3, background:TIERS[tier].badge, opacity: scoreToOpacity(s) }} />;
+          })}
+        </div>
+        <span style={{ fontSize:10, color:"#a8a29e" }}>1 → 10 score</span>
+        <div style={{ width:1, height:12, background:"#e2ded7" }} />
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <div style={{ width:6, height:6, borderRadius:"50%", background:"#fff", border:"1px solid #a8a29e" }} />
+          <span style={{ fontSize:10, color:"#a8a29e" }}>Holiday</span>
+        </div>
+        <span style={{ fontSize:10 }}>🌀 <span style={{ color:"#a8a29e" }}>Storm risk</span></span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Timeline View ───────────────────────────────────────────────────────────
+const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights }) {
+  const [hovered, setHovered] = useState(null);
+
+  const scores = useMemo(() => months.map(m => computeCustomScore(m, weights)), [months, weights]);
+
+  // Find best window (top 3, consecutive if possible)
+  const sortedByScore = useMemo(() =>
+    [...months].map((m,i) => ({ ...m, score: scores[i] }))
+      .sort((a,b) => b.score - a.score), [months, scores]);
+  const top3 = sortedByScore.slice(0,3).map(m => m.m).sort((a,b) => a-b);
+
+  // Detect consecutive run in top3 for bracket
+  const windowSpan = useMemo(() => {
+    function isConsec(a,b) { return b-a===1 || (a===12&&b===1); }
+    if (top3.length < 2) return null;
+    // all 3 consecutive
+    if (top3.length === 3 && isConsec(top3[0],top3[1]) && isConsec(top3[1],top3[2]))
+      return { start: top3[0]-1, end: top3[2]-1 };
+    // wrap Dec-Jan
+    if (top3[0]===1 && top3[1]===11 && top3[2]===12) return { start:10, end:12, wrap:true };
+    // first 2 consec
+    if (isConsec(top3[0],top3[1])) return { start:top3[0]-1, end:top3[1]-1 };
+    // last 2 consec
+    if (isConsec(top3[1],top3[2])) return { start:top3[1]-1, end:top3[2]-1 };
+    return null;
+  }, [top3]);
+
+  const lanes = [
+    { key:"score",  label:"Score",    height:64 },
+    { key:"rain",   label:"Rain",     height:34 },
+    { key:"crowd",  label:"Crowds",   height:34 },
+    { key:"price",  label:"Prices",   height:34 },
+    { key:"events", label:"Events",   height:34 },
+  ];
+
+  function getLaneFill(m, score, key) {
+    switch(key) {
+      case "score":  return { pct: (score/10)*100, color: TIERS[verdict(score,m.typhoon).tier].badge };
+      case "rain":   return { pct: (m.rainDays/31)*100, color: m.rainDays>=16?"#dc2626":m.rainDays>=10?"#ea580c":"#60a5fa" };
+      case "crowd":  return { pct: (m.crowds/10)*100, color: crowdColor(m.crowds) };
+      case "price":  return { pct: Math.min(100,m.priceIdx), color: m.priceIdx>110?"#dc2626":m.priceIdx<90?"#059669":"#ca8a04" };
+      default: return null;
+    }
+  }
+
+  function getLaneValue(m, score, key) {
+    switch(key) {
+      case "score":  return score.toFixed(1);
+      case "rain":   return `${m.rainDays}d`;
+      case "crowd":  return crowdLabel(m.crowds).split(" ")[0];
+      case "price":  { const d = Math.round(m.priceIdx-100); return d===0?"avg":d>0?`+${d}%`:`${d}%`; }
+      default: return null;
+    }
+  }
+
+  const LABEL_W = 52;
+
+  return (
+    <div style={{ marginTop:4 }}>
+      {/* Best window label */}
+      {windowSpan && (() => {
+        const startPct = windowSpan.start / 12 * 100;
+        const endPct   = (windowSpan.end + 1) / 12 * 100;
+        const widthPct = endPct - startPct;
+        return (
+          <div style={{ position:"relative", height:20, marginBottom:2, paddingLeft:LABEL_W }}>
+            <div style={{
+              position:"absolute",
+              left:`${startPct}%`, width:`${widthPct}%`,
+              top:0, bottom:0,
+              background:"#f0fdf4", border:"1.5px solid #86efac", borderBottom:"none",
+              borderRadius:"8px 8px 0 0",
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <span style={{ fontSize:10, fontWeight:700, color:"#166534", whiteSpace:"nowrap" }}>✨ Best window</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Month header */}
+      <div style={{ display:"flex", marginBottom:3 }}>
+        <div style={{ width:LABEL_W, flexShrink:0 }} />
+        {months.map((m, i) => {
+          const isTop = top3.includes(m.m);
+          const isSelected = selectedMonth === m.m;
+          return (
+            <div key={m.m} style={{ flex:1, textAlign:"center", position:"relative" }}>
+              <button onClick={() => onSelectMonth(m.m)}
+                style={{ width:"100%", background:"none", border:"none", cursor:"pointer", padding:"2px 0", fontFamily:"inherit",
+                  display:"flex", flexDirection:"column", alignItems:"center", gap:1 }}>
+                <span style={{ fontSize:11, fontWeight: isTop?800:600,
+                  color: isSelected ? "#0d9488" : isTop ? "#1c1917" : "#a8a29e",
+                  transition:"color 0.15s" }}>
+                  {MONTH_ABBR[i]}
+                </span>
+                {isTop && <span style={{ width:4, height:4, borderRadius:"50%", background:"#0d9488", display:"block" }} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Swimlanes */}
+      {lanes.map((lane, li) => (
+        <div key={lane.key} style={{ display:"flex", marginBottom: li<lanes.length-1 ? 3 : 0, alignItems:"stretch" }}>
+          {/* Lane label */}
+          <div style={{ width:LABEL_W, flexShrink:0, display:"flex", alignItems:"center",
+            fontSize:9, fontWeight:700, color:"#c4bfb8", textTransform:"uppercase", letterSpacing:"0.07em",
+            paddingRight:8 }}>
+            {lane.label}
+          </div>
+
+          {/* Month cells */}
+          {months.map((m, i) => {
+            const score = scores[i];
+            const v = verdict(score, m.typhoon);
+            const isSelected = selectedMonth === m.m;
+            const isHov = hovered === m.m;
+            const isTop = top3.includes(m.m);
+
+            if (lane.key === "events") {
+              const hasHoliday = m.holidays?.length > 0;
+              const topH = hasHoliday ? m.holidays.reduce((a,b) => (IMPACT_RANK[b.crowdImpact]||0)>(IMPACT_RANK[a.crowdImpact]||0)?b:a) : null;
+              const hasTyphoon = m.typhoon !== "none";
+              return (
+                <div key={m.m} onClick={() => onSelectMonth(m.m)}
+                  onMouseEnter={() => setHovered(m.m)} onMouseLeave={() => setHovered(null)}
+                  style={{ flex:1, height:lane.height, cursor:"pointer", display:"flex", alignItems:"center",
+                    justifyContent:"center", gap:2, borderRadius:5,
+                    background: isSelected ? v.bg : isHov ? "#f8f7f4" : "#fff",
+                    border: isSelected ? `1.5px solid ${v.border}` : "1.5px solid transparent",
+                    transition:"all 0.12s", margin:"0 1px" }}>
+                  {topH && (
+                    <div title={topH.name} style={{ width:7, height:7, borderRadius:"50%", background:IMPACT_COLORS[topH.crowdImpact], flexShrink:0 }} />
+                  )}
+                  {hasTyphoon && (
+                    <span style={{ fontSize:9, lineHeight:1 }}>{m.typhoon==="high"?"🌀":"⛈"}</span>
+                  )}
+                  {!topH && !hasTyphoon && (
+                    <span style={{ fontSize:9, color:"#e2ded7" }}>·</span>
+                  )}
+                </div>
+              );
+            }
+
+            const fill = getLaneFill(m, score, lane.key);
+            const val = getLaneValue(m, score, lane.key);
+
+            return (
+              <div key={m.m} onClick={() => onSelectMonth(m.m)}
+                onMouseEnter={() => setHovered(m.m)} onMouseLeave={() => setHovered(null)}
+                style={{ flex:1, height:lane.height, cursor:"pointer", position:"relative",
+                  borderRadius:5, overflow:"hidden", margin:"0 1px",
+                  background: isSelected ? "#f3f1ed" : "#f8f7f4",
+                  border: isSelected ? `1.5px solid ${v.border}` : `1.5px solid ${isHov ? "#e2ded7" : "transparent"}`,
+                  transition:"border-color 0.12s" }}>
+                {/* Fill bar — from bottom */}
+                <div style={{ position:"absolute", bottom:0, left:0, right:0,
+                  height:`${fill.pct}%`,
+                  background: lane.key==="score"
+                    ? (isSelected||isHov ? fill.color : fill.color + "cc")
+                    : fill.color + "44",
+                  transition:"height 0.4s ease" }} />
+                {/* Score lane: also colored top overlay for selected */}
+                {lane.key==="score" && isTop && (
+                  <div style={{ position:"absolute", top:0, left:0, right:0, bottom:0,
+                    background: isSelected ? v.bg : "transparent",
+                    border: isSelected ? `inset 0 0 0 1.5px ${v.badge}` : "none",
+                    borderRadius:4, transition:"all 0.15s" }} />
+                )}
+                {/* Value label */}
+                {val && (
+                  <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center",
+                    justifyContent:"center", fontSize: lane.key==="score" ? 13 : 9,
+                    fontWeight: lane.key==="score" ? 800 : 600,
+                    color: lane.key==="score" ? (fill.pct > 50 ? "#fff" : v.text)
+                      : (isHov||isSelected ? "#57534e" : "#c4bfb8"),
+                    letterSpacing: lane.key==="score" ? "-0.3px" : "0",
+                    transition:"color 0.12s", pointerEvents:"none" }}>
+                    {val}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Hover tooltip — fixed height to prevent layout shift */}
+      {(() => {
+        const m = hovered !== null ? months[hovered-1] : null;
+        const score = m ? scores[hovered-1] : 0;
+        const v = m ? verdict(score, m.typhoon) : null;
+        return (
+          <div style={{ marginTop:8, height:38, borderRadius:12, overflow:"hidden",
+            background: m ? "#1c1917" : "transparent",
+            transition:"background 0.15s", display:"flex", alignItems:"center",
+            padding: m ? "0 14px" : "0", gap:14, flexWrap:"nowrap" }}>
+            {m && v && <>
+              <span style={{ fontWeight:800, fontSize:13, color:"#f3f1ed", whiteSpace:"nowrap" }}>{m.name}</span>
+              <span style={{ color:v.badge, fontWeight:700, fontSize:12, whiteSpace:"nowrap" }}>{v.label} · {score.toFixed(1)}</span>
+              <span style={{ color:"#a8a29e", fontSize:12, whiteSpace:"nowrap" }}>{fmtTemp(m.high,tempUnit)}/{fmtTemp(m.low,tempUnit)}</span>
+              <span style={{ color: m.rainDays>=16?"#f87171":"#a8a29e", fontSize:12, whiteSpace:"nowrap" }}>{m.rainDays}d rain</span>
+              <span style={{ color: crowdColor(m.crowds), fontSize:12, whiteSpace:"nowrap" }}>{crowdLabel(m.crowds)}</span>
+              {m.holidays?.length > 0 && <span style={{ color:"#fbbf24", fontSize:12, whiteSpace:"nowrap" }}>📅 {m.holidays[0].name}</span>}
+              {m.typhoon!=="none" && <span style={{ color: m.typhoon==="high"?"#f87171":"#fb923c", fontSize:12, whiteSpace:"nowrap" }}>{m.typhoon==="high"?"🌀 Typhoon risk":"⛈ Storms"}</span>}
+              <span style={{ color:"#555", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>click to expand</span>
+            </>}
+          </div>
+        );
+      })()}
+
+      {/* Legend */}
+      <div style={{ display:"flex", gap:14, marginTop:10, flexWrap:"wrap" }}>
+        {[5,4,3,2,1].map(tier => (
+          <div key={tier} style={{ display:"flex", alignItems:"center", gap:4 }}>
+            <div style={{ width:10, height:10, borderRadius:2, background:TIERS[tier].badge }} />
+            <span style={{ fontSize:10, color:"#a8a29e" }}>{TIERS[tier].label}</span>
+          </div>
+        ))}
+        <div style={{ width:1, height:14, background:"#e2ded7" }} />
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <div style={{ width:7, height:7, borderRadius:"50%", background:"#dc2626" }} />
+          <span style={{ fontSize:10, color:"#a8a29e" }}>Holiday event</span>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <span style={{ fontSize:10 }}>🌀</span>
+          <span style={{ fontSize:10, color:"#a8a29e" }}>Storm risk</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── App ─────────────────────────────────────────────────────────────────────
+function App() {
+  const shared = useMemo(() => decodeShare(), []);
+  const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
+  const [showTweaks, setShowTweaks] = useState(false);
+  const [selectedCity, setSelectedCity] = useState(shared?.city || "hong-kong");
+  const [planningYear, setPlanningYear] = useState(shared?.year || CURRENT_YEAR + 1);
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [weights, setWeights] = useState(shared?.weights || DEFAULT_WEIGHTS);
+  const [passport, setPassport] = useState(shared?.passport || "US");
+  const [viewMode, setViewMode] = useState("heatmap");
+  const detailRef = useRef(null);
+
+  const cityData = CITIES[selectedCity];
+
+  useEffect(() => {
+    window.addEventListener("message", e => {
+      if (e.data?.type === "__activate_edit_mode")   setShowTweaks(true);
+      if (e.data?.type === "__deactivate_edit_mode") setShowTweaks(false);
+    });
+    window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+  }, []);
+
+  function handleSelectMonth(m) { setSelectedMonth(prev => prev === m ? null : m); }
+  function handleCityChange(slug) { setSelectedCity(slug); setSelectedMonth(null); }
+
+  useEffect(() => {
+    if (selectedMonth !== null && detailRef.current) {
+      const el = detailRef.current;
+      const y = el.getBoundingClientRect().top + window.scrollY - 70;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => { document.title = `offpeak — ${cityData.city}`; }, [cityData]);
+
+  const tempUnit = tweaks.tempUnit;
+
+  return (
+    <div style={{ minHeight: "100vh" }}>
+      {/* Nav */}
+      <nav className="nav">
+        <div className="nav-inner">
+          <div className="nav-row1">
+            <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: "-0.5px", color: "#0d9488", flexShrink: 0 }}>offpeak</span>
+            <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#0d9488", border: "1px solid #99f6e4", padding: "2px 6px", borderRadius: 99, flexShrink: 0 }}>beta</span>
+            <span className="nav-tagline">· weather, crowds & prices</span>
+            <div style={{ width: 1, height: 18, background: "#e2ded7", flexShrink: 0 }} />
+            <CityDropdown selected={selectedCity} onSelect={handleCityChange} />
+            <span style={{ fontSize:12, color:"#a8a29e", flexShrink:0 }}>{cityData.country}</span>
+            <VisaBadge citySlug={selectedCity} passport={passport} />
+            <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6 }}>
+              <PassportSelector selected={passport} onSelect={setPassport} />
+              <ShareButton city={selectedCity} weights={weights} year={planningYear} passport={passport} />
+            </div>
+          </div>
+          </div>
+      </nav>
+
+      {/* Main */}
+      <main className="main-wrap">
+        <BestHero cityData={cityData} onSelectMonth={handleSelectMonth} planningYear={planningYear} weights={weights} />
+
+        <PersonalizePanel weights={weights} onChange={setWeights} />
+        {/* View toggle bar */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, margin:"14px 0 10px", borderTop:"1px solid #ede9e3", paddingTop:14 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:"#a8a29e", textTransform:"uppercase", letterSpacing:"0.08em", flexShrink:0 }}>All months</span>
+          <div style={{ display:"flex", background:"#f0ede8", borderRadius:8, padding:2, gap:1 }}>
+            {[{id:"heatmap",label:"▦ Heatmap"},{id:"timeline",label:"▬ Timeline"},{id:"table",label:"≡ Table"}].map(v => (
+              <button key={v.id} onClick={() => setViewMode(v.id)}
+                style={{ padding:"4px 12px", borderRadius:6, fontSize:11, fontWeight:700, border:"none", cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s",
+                  background: viewMode===v.id ? "#fff" : "transparent",
+                  color:       viewMode===v.id ? "#1c1917" : "#a8a29e",
+                  boxShadow:   viewMode===v.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ flex:1 }} />
+          <div className="temp-toggle">
+            {["C","F"].map(u => (
+              <button key={u} className={`temp-btn ${tempUnit === u ? "active" : ""}`}
+                onClick={() => setTweaks(t => ({ ...t, tempUnit: u }))}>°{u}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Heatmap view */}
+        {viewMode === "heatmap" && (
+          <div style={{ background:"#fff", border:"1.5px solid #ede9e3", borderRadius:16, padding:"16px 18px" }}>
+            <HeatmapView
+              weights={weights}
+              selectedCity={selectedCity}
+              onSelectCity={handleCityChange}
+              onSelectMonth={handleSelectMonth}
+              tempUnit={tempUnit}
+            />
+          </div>
+        )}
+
+        {/* Timeline view */}
+        {viewMode === "timeline" && (
+          <div style={{ background:"#fff", border:"1.5px solid #ede9e3", borderRadius:16, padding:"16px 18px" }}>
+            <TimelineView
+              months={cityData.months}
+              selectedMonth={selectedMonth}
+              onSelectMonth={handleSelectMonth}
+              tempUnit={tempUnit}
+              weights={weights}
+            />
+          </div>
+        )}
+
+        {/* Table view */}
+        {viewMode === "table" && (
+          <table className="month-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Score</th>
+                <th>Temp</th>
+                <th className="col-hide-sm">Rain</th>
+                <th>Crowds</th>
+                <th className="col-hide-sm">Hotels</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {cityData.months.map(month => (
+                <MonthRow key={month.m} month={month} isSelected={selectedMonth === month.m}
+                  onSelect={handleSelectMonth} tempUnit={tempUnit}
+                  customScore={computeCustomScore(month, weights)} weights={weights} />
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* Detail panel */}
+        {selectedMonth !== null && (
+          <div ref={detailRef}>
+            <DetailPanel
+              month={cityData.months[selectedMonth - 1]}
+              cityData={cityData}
+              citySlug={selectedCity}
+              passport={passport}
+              setPassport={setPassport}
+              planningYear={planningYear}
+              onYearChange={setPlanningYear}
+              tempUnit={tempUnit}
+              onClose={() => setSelectedMonth(null)}
+            />
+          </div>
+        )}
+      </main>
+
+      {/* Tweaks */}
+      {showTweaks && (
+        <div className="tweaks-panel">
+          <div className="tweaks-title">Tweaks</div>
+          <div className="tweak-row">
+            <span className="tweak-label">Show score numbers</span>
+            <input type="checkbox" checked={tweaks.showNumbers}
+              onChange={e => {
+                const v = { ...tweaks, showNumbers: e.target.checked };
+                setTweaks(v);
+                window.parent.postMessage({ type: "__edit_mode_set_keys", edits: v }, "*");
+              }} />
+          </div>
+          <div className="tweak-row">
+            <span className="tweak-label">Temperature unit</span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {["C","F"].map(u => (
+                <button key={u} style={{ padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid #e2ded7", cursor: "pointer", background: tempUnit === u ? "#1c1917" : "#fff", color: tempUnit === u ? "#fff" : "#57534e", fontFamily: "inherit" }}
+                  onClick={() => { const v = {...tweaks, tempUnit: u}; setTweaks(v); window.parent.postMessage({type:"__edit_mode_set_keys", edits: v}, "*"); }}>
+                  °{u}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
