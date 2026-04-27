@@ -983,10 +983,13 @@ function PersonalizePanel({ weights, onChange }) {
 }
 
 // ─── MonthRow ────────────────────────────────────────────────────────────────
-function MonthRow({ month, isSelected, onSelect, tempUnit, customScore, weights }) {
+function MonthRow({ month, isSelected, onSelect, tempUnit, customScore, weights, rank }) {
   const score = customScore ?? month.overall;
   const v = verdict(score, month.typhoon);
   const cCol = crowdColor(month.crowds);
+  const rainPct = Math.round((month.rainDays/31)*100);
+  const rainColor = month.rainDays>=16?"#dc2626":month.rainDays>=10?"#ea580c":"#60a5fa";
+  const crowdPct = Math.round((month.crowds/10)*100);
   const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
   const priceCol = priceDelta===null ? "var(--txt-4)" : priceDelta>10 ? "#dc2626" : priceDelta<-5 ? "#059669" : "var(--txt-3)";
   const priceStr = priceDelta===null ? "—" : priceDelta===0 ? "avg" : priceDelta>0 ? `+${priceDelta}%` : `${priceDelta}%`;
@@ -996,8 +999,17 @@ function MonthRow({ month, isSelected, onSelect, tempUnit, customScore, weights 
 
   return (
     <tr className={`month-row ${isSelected ? "month-row-selected" : ""}`} onClick={() => onSelect(month.m)}>
-      <td style={{ borderLeftColor: isSelected ? v.badge : undefined, background: isSelected ? v.bg : undefined }}>
-        <span className="mr-name" style={{ color: isSelected ? v.text : undefined }}>{month.name}</span>
+      <td style={{ borderLeftColor: isSelected ? v.badge : rank<=3 ? v.badge+"99" : undefined, background: isSelected ? v.bg : undefined }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          {rank<=3 && !isSelected && (
+            <span style={{ fontSize:9, fontWeight:800, width:14, height:14, borderRadius:"50%",
+              background:v.bg, border:`1px solid ${v.border}`, color:v.badge,
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+              {rank}
+            </span>
+          )}
+          <span className="mr-name" style={{ color: isSelected ? v.text : undefined }}>{month.name}</span>
+        </div>
       </td>
       <td style={{ background: isSelected ? v.bg : undefined }}>
         <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
@@ -1008,10 +1020,12 @@ function MonthRow({ month, isSelected, onSelect, tempUnit, customScore, weights 
       <td style={{ background: isSelected ? v.bg : undefined }}>
         <span className="mr-temp">{fmtTemp(month.high, tempUnit)}/{fmtTemp(month.low, tempUnit)}</span>
       </td>
-      <td className="col-hide-sm" style={{ background: isSelected ? v.bg : undefined }}>
+      <td className="col-hide-sm" style={{
+        background: isSelected ? v.bg : `linear-gradient(to right, ${rainColor}1a ${rainPct}%, transparent ${rainPct}%)` }}>
         <span className="mr-rain" style={{ color: month.rainDays>=16?"#dc2626":month.rainDays>=10?"#ea580c":"var(--txt-4)", fontWeight: month.rainDays>=10?700:400 }}>{month.rainDays}d</span>
       </td>
-      <td style={{ background: isSelected ? v.bg : undefined }}>
+      <td style={{
+        background: isSelected ? v.bg : `linear-gradient(to right, ${cCol}1a ${crowdPct}%, transparent ${crowdPct}%)` }}>
         <span className="mr-crowd" style={{ color:cCol }}>{crowdLabel(month.crowds)}</span>
       </td>
       <td className="col-hide-sm" style={{ background: isSelected ? v.bg : undefined }}>
@@ -1078,8 +1092,9 @@ function BarRow({ label, value, valueColor, fill, fillColor, ends, tip }) {
 }
 
 // ─── DetailPanel ─────────────────────────────────────────────────────────────
-function DetailPanel({ month, cityData, citySlug, passport, setPassport, planningYear, onYearChange, tempUnit, onClose }) {
-  const v = verdict(month.overall, month.typhoon);
+function DetailPanel({ month, cityData, citySlug, passport, setPassport, planningYear, onYearChange, tempUnit, onClose, weights }) {
+  const score = weights ? computeCustomScore(month, weights) : month.overall;
+  const v = verdict(score, month.typhoon);
   const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
   const priceLabel = priceDelta===null ? "No data" : priceDelta===0 ? "Average" : priceDelta>0 ? `+${priceDelta}% vs avg` : `${priceDelta}% vs avg`;
   const priceCol = priceDelta===null ? "var(--txt-4)" : priceDelta>10 ? "#dc2626" : priceDelta<-5 ? "#059669" : "var(--txt-3)";
@@ -1117,10 +1132,17 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
           </div>
         </div>
         <div className="detail-score-block">
-          <div className="detail-score-num" style={{ color:v.text }}>{month.overall.toFixed(1)}</div>
+          <div className="detail-score-num" style={{ color:v.text }}>{score.toFixed(1)}</div>
           <div className="detail-score-label" style={{ color:v.text }}>out of 10</div>
         </div>
         <button className="close-btn" onClick={onClose}>✕</button>
+      </div>
+
+      {/* Quick take strip — verdict at a glance */}
+      <div style={{ padding:"12px 24px", background:v.bg, borderBottom:`1px solid ${v.border}` }}>
+        <p style={{ margin:0, fontSize:13, color:v.text, lineHeight:1.75, fontStyle:"italic" }}>
+          {quickTake}
+        </p>
       </div>
 
       {/* Two-column body */}
@@ -1219,55 +1241,49 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
         </div>
       </div>
 
-      {/* Events + Quick take */}
+      {/* Events */}
       <div className="detail-events">
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
-          <div>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, flexWrap:"wrap", gap:8 }}>
-              <span className="col-title" style={{ margin:0 }}>Events</span>
-              <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
-                {[CURRENT_YEAR-1, CURRENT_YEAR, CURRENT_YEAR+1, CURRENT_YEAR+2, CURRENT_YEAR+3].map(y => (
-                  <button key={y} onClick={() => onYearChange(y)}
-                    style={{ padding:"2px 7px", borderRadius:"var(--r-xs)", fontSize:11, fontWeight:600,
-                      border:"1px solid", cursor:"pointer", fontFamily:"inherit", transition:"all 0.12s",
-                      background: planningYear===y ? "var(--brand)" : "transparent",
-                      color:      planningYear===y ? "#fff" : "var(--txt-4)",
-                      borderColor:planningYear===y ? "var(--brand)" : "var(--border)" }}>
-                    {y}
-                  </button>
-                ))}
-              </div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+          <span className="col-title" style={{ margin:0 }}>Events & Holidays</span>
+          <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
+            {[CURRENT_YEAR-1, CURRENT_YEAR, CURRENT_YEAR+1, CURRENT_YEAR+2, CURRENT_YEAR+3].map(y => (
+              <button key={y} onClick={() => onYearChange(y)}
+                style={{ padding:"2px 7px", borderRadius:"var(--r-xs)", fontSize:11, fontWeight:600,
+                  border:"1px solid", cursor:"pointer", fontFamily:"inherit", transition:"all 0.12s",
+                  background: planningYear===y ? "var(--brand)" : "transparent",
+                  color:      planningYear===y ? "#fff" : "var(--txt-4)",
+                  borderColor:planningYear===y ? "var(--brand)" : "var(--border)" }}>
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:6 }}>
+          {month.holidays?.length===0 && cityData && !cityData.months.some(m => m.holidays?.length>0) ? (
+            <div style={{ padding:"10px 12px", background:"#f8f7f5", border:"1px solid var(--border)", borderRadius:"var(--r-sm)", gridColumn:"1/-1" }}>
+              <span style={{ fontSize:12, color:"var(--txt-4)" }}>📋 Holiday data coming soon for this city</span>
             </div>
-            {month.holidays?.length===0 && cityData && !cityData.months.some(m => m.holidays?.length>0) ? (
-              <div style={{ padding:"10px 12px", background:"#f8f7f5", border:"1px solid var(--border)", borderRadius:"var(--r-sm)" }}>
-                <span style={{ fontSize:12, color:"var(--txt-4)" }}>📋 Holiday data coming soon for this city</span>
-              </div>
-            ) : month.holidays?.length===0 ? (
-              <div className="no-holiday" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0" }}>
-                <span style={{ fontSize:13, color:"#166534" }}>✓ No major events — smooth travel</span>
-              </div>
-            ) : month.holidays?.map((h,i) => {
-              const impactColor = IMPACT_COLORS[h.crowdImpact] || "var(--txt-3)";
-              return (
-                <div key={i} className="holiday-item" style={{ background:"#fffbeb", borderColor:"#fcd34d" }}>
-                  <span className="holiday-icon">📅</span>
-                  <div className="holiday-body">
-                    <div className="holiday-name">{h.name}</div>
-                    <div className="holiday-dates">{fmtDateRange(h.dateStart, h.dateEnd, h.days)}</div>
-                    <div className="holiday-impact">
-                      <span style={{ color:impactColor, fontWeight:700 }}>{h.crowdImpact.replace("_"," ")} crowds</span>
-                      {h.priceImpact!=="none" && <span style={{ color:"var(--txt-3)" }}> · {h.priceImpact} prices</span>}
-                      {h.closureImpact!=="none" && <span style={{ color:"var(--txt-3)" }}> · {h.closureImpact} closures</span>}
-                    </div>
+          ) : month.holidays?.length===0 ? (
+            <div className="no-holiday" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", gridColumn:"1/-1" }}>
+              <span style={{ fontSize:13, color:"#166534" }}>✓ No major events — smooth travel</span>
+            </div>
+          ) : month.holidays?.map((h,i) => {
+            const impactColor = IMPACT_COLORS[h.crowdImpact] || "var(--txt-3)";
+            return (
+              <div key={i} className="holiday-item" style={{ background:"#fffbeb", borderColor:"#fcd34d" }}>
+                <span className="holiday-icon">📅</span>
+                <div className="holiday-body">
+                  <div className="holiday-name">{h.name}</div>
+                  <div className="holiday-dates">{fmtDateRange(h.dateStart, h.dateEnd, h.days)}</div>
+                  <div className="holiday-impact">
+                    <span style={{ color:impactColor, fontWeight:700 }}>{h.crowdImpact.replace("_"," ")} crowds</span>
+                    {h.priceImpact!=="none" && <span style={{ color:"var(--txt-3)" }}> · {h.priceImpact} prices</span>}
+                    {h.closureImpact!=="none" && <span style={{ color:"var(--txt-3)" }}> · {h.closureImpact} closures</span>}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-          <div>
-            <div className="col-title">Quick take</div>
-            <p className="quick-take">{quickTake}</p>
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -1546,24 +1562,27 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
     [...months].map((m,i) => ({ ...m, score:scores[i] }))
       .sort((a,b) => b.score-a.score).slice(0,3).map(m => m.m).sort((a,b) => a-b),
   [months, scores]);
+  const bestMonth = useMemo(() =>
+    [...months].map((m,i) => ({m, score:scores[i]})).sort((a,b) => b.score-a.score)[0]?.m.m,
+  [months, scores]);
 
-  const windowSpan = useMemo(() => {
+  const windowMonths = useMemo(() => {
     function isConsec(a,b) { return b-a===1||(a===12&&b===1); }
-    if (top3.length<2) return null;
-    if (top3.length===3 && isConsec(top3[0],top3[1]) && isConsec(top3[1],top3[2]))
-      return { start:top3[0]-1, end:top3[2]-1 };
-    if (top3[0]===1&&top3[1]===11&&top3[2]===12) return { start:10, end:12, wrap:true };
-    if (isConsec(top3[0],top3[1])) return { start:top3[0]-1, end:top3[1]-1 };
-    if (isConsec(top3[1],top3[2])) return { start:top3[1]-1, end:top3[2]-1 };
-    return null;
+    if (top3.length<2) return top3.slice(0,1);
+    if (top3.length===3 && isConsec(top3[0],top3[1]) && isConsec(top3[1],top3[2])) return top3;
+    if (top3[0]===1&&top3[1]===11&&top3[2]===12) return top3;
+    if (isConsec(top3[0],top3[1])) return [top3[0],top3[1]];
+    if (isConsec(top3[1],top3[2])) return [top3[1],top3[2]];
+    return top3.slice(0,1);
   }, [top3]);
+  const winSet = useMemo(() => new Set(windowMonths), [windowMonths]);
 
   const lanes = [
     { key:"score",  label:"Score",  height:60 },
     { key:"rain",   label:"Rain",   height:32 },
     { key:"crowd",  label:"Crowds", height:32 },
     { key:"price",  label:"Prices", height:32 },
-    { key:"events", label:"Events", height:32 },
+    { key:"events", label:"Events", height:28 },
   ];
 
   function getLaneFill(m, score, key) {
@@ -1571,7 +1590,7 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
       case "score":  return { pct:(score/10)*100, color:TIERS[verdict(score,m.typhoon).tier].badge };
       case "rain":   return { pct:(m.rainDays/31)*100, color:m.rainDays>=16?"#dc2626":m.rainDays>=10?"#ea580c":"#60a5fa" };
       case "crowd":  return { pct:(m.crowds/10)*100, color:crowdColor(m.crowds) };
-      case "price":  return { pct:Math.min(100,m.priceIdx), color:m.priceIdx>110?"#dc2626":m.priceIdx<90?"#059669":"#ca8a04" };
+      case "price":  return m.priceIdx ? { pct:Math.min(100,m.priceIdx), color:m.priceIdx>110?"#dc2626":m.priceIdx<90?"#059669":"#ca8a04" } : { pct:0, color:"var(--border)" };
       default: return null;
     }
   }
@@ -1580,7 +1599,7 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
       case "score": return score.toFixed(1);
       case "rain":  return `${m.rainDays}d`;
       case "crowd": return crowdLabel(m.crowds).split(" ")[0];
-      case "price": { const d=Math.round(m.priceIdx-100); return d===0?"avg":d>0?`+${d}%`:`${d}%`; }
+      case "price": { if (!m.priceIdx) return "—"; const d=Math.round(m.priceIdx-100); return d===0?"avg":d>0?`+${d}%`:`${d}%`; }
       default: return null;
     }
   }
@@ -1589,35 +1608,31 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
 
   return (
     <div style={{ marginTop:4 }}>
-      {windowSpan && (() => {
-        const startPct = windowSpan.start/12*100;
-        const widthPct = (windowSpan.end-windowSpan.start+1)/12*100;
-        return (
-          <div style={{ position:"relative", height:20, marginBottom:2, paddingLeft:LABEL_W }}>
-            <div style={{ position:"absolute", left:`${startPct}%`, width:`${widthPct}%`,
-              top:0, bottom:0, background:"#f0fdf4", border:"1.5px solid #86efac",
-              borderBottom:"none", borderRadius:"var(--r-xs) var(--r-xs) 0 0",
-              display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <span style={{ fontSize:10, fontWeight:700, color:"#166534", whiteSpace:"nowrap" }}>✦ Best window</span>
-            </div>
-          </div>
-        );
-      })()}
-
+      {/* Month header — scores always visible, window months visually capped */}
       <div style={{ display:"flex", marginBottom:3 }}>
         <div style={{ width:LABEL_W, flexShrink:0 }} />
         {months.map((m,i) => {
           const isTop = top3.includes(m.m);
           const isSel = selectedMonth===m.m;
+          const isWin = winSet.has(m.m);
+          const score = scores[i];
+          const vd = verdict(score, m.typhoon);
           return (
-            <div key={m.m} style={{ flex:1, textAlign:"center", position:"relative" }}>
+            <div key={m.m} style={{ flex:1, textAlign:"center" }}>
               <button onClick={() => onSelectMonth(m.m)}
-                style={{ width:"100%", background:"none", border:"none", cursor:"pointer",
-                  padding:"2px 0", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:1 }}>
-                <span style={{ fontSize:11, fontWeight: isTop?800:600,
+                style={{ width:"100%", background: isWin?"rgba(16,185,129,0.06)":"none",
+                  border:"none", cursor:"pointer", padding:"3px 0 4px", fontFamily:"inherit",
+                  display:"flex", flexDirection:"column", alignItems:"center", gap:1,
+                  borderRadius:"var(--r-xs) var(--r-xs) 0 0",
+                  borderTop: isWin ? "2px solid #86efac" : "2px solid transparent",
+                  transition:"background 0.1s" }}>
+                <span style={{ fontSize:11, fontWeight:isTop?800:600,
                   color: isSel?"var(--brand)":isTop?"var(--txt-1)":"var(--txt-4)",
                   transition:"color 0.12s" }}>{MONTH_NAMES[i]}</span>
-                {isTop && <span style={{ width:4, height:4, borderRadius:"50%", background:"var(--brand)", display:"block" }} />}
+                <span style={{ fontSize:10, fontWeight:700,
+                  color: isSel?"var(--brand)":vd.badge,
+                  opacity: isTop?1:0.45,
+                  transition:"color 0.12s, opacity 0.12s" }}>{score.toFixed(1)}</span>
               </button>
             </div>
           );
@@ -1636,21 +1651,28 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
             const v = verdict(score, m.typhoon);
             const isSel = selectedMonth===m.m;
             const isHov = hovered===m.m;
-            const isTop = top3.includes(m.m);
+            const isWin = winSet.has(m.m);
+            const isBest = m.m===bestMonth;
 
             if (lane.key==="events") {
               const topH = m.holidays?.length
                 ? m.holidays.reduce((a,b) => (IMPACT_RANK[b.crowdImpact]||0)>(IMPACT_RANK[a.crowdImpact]||0)?b:a)
                 : null;
+              const evtWord = topH ? topH.name.split(/[\s\-]/)[0] : null;
               return (
                 <div key={m.m} onClick={() => onSelectMonth(m.m)}
                   onMouseEnter={() => setHovered(m.m)} onMouseLeave={() => setHovered(null)}
                   style={{ flex:1, height:lane.height, cursor:"pointer", display:"flex",
-                    alignItems:"center", justifyContent:"center", gap:2, borderRadius:"var(--r-xs)",
-                    background: isSel?v.bg:isHov?"#f8f7f4":"var(--surface)",
-                    border: isSel?`1.5px solid ${v.border}`:"1.5px solid transparent",
-                    transition:"all 0.1s", margin:"0 1px" }}>
-                  {topH && <div title={topH.name} style={{ width:6, height:6, borderRadius:"50%", background:IMPACT_COLORS[topH.crowdImpact], flexShrink:0 }} />}
+                    flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
+                    borderRadius:"0 0 var(--r-xs) var(--r-xs)", margin:"0 1px",
+                    background: isSel?v.bg : isWin?"#f0fdf4" : isHov?"#f8f7f4" : "transparent",
+                    border: isSel?`1.5px solid ${v.border}` : isWin?"1.5px solid rgba(134,239,172,0.6)" : isHov?"1.5px solid var(--border)" : "1.5px solid transparent",
+                    transition:"all 0.1s" }}>
+                  {evtWord && (
+                    <span style={{ fontSize:8, fontWeight:700, color:IMPACT_COLORS[topH.crowdImpact],
+                      lineHeight:1.2, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis",
+                      whiteSpace:"nowrap", padding:"0 2px" }}>{evtWord}</span>
+                  )}
                   {m.typhoon!=="none" && <span style={{ fontSize:9, lineHeight:1 }}>{m.typhoon==="high"?"🌀":"⛈"}</span>}
                   {!topH && m.typhoon==="none" && <span style={{ fontSize:8, color:"var(--border)" }}>·</span>}
                 </div>
@@ -1665,18 +1687,20 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
                 onMouseEnter={() => setHovered(m.m)} onMouseLeave={() => setHovered(null)}
                 style={{ flex:1, height:lane.height, cursor:"pointer", position:"relative",
                   borderRadius:"var(--r-xs)", overflow:"hidden", margin:"0 1px",
-                  background: isSel?"#f3f1ed":"#f8f7f4",
-                  border: isSel?`1.5px solid ${v.border}`:`1.5px solid ${isHov?"var(--border)":"transparent"}`,
-                  transition:"border-color 0.1s" }}>
+                  background: isSel?"#f3f1ed" : isWin?"#f0fdf4" : "#f8f7f4",
+                  border: isSel?`1.5px solid ${v.border}` : isWin?"1.5px solid rgba(134,239,172,0.6)" : `1.5px solid ${isHov?"var(--border)":"transparent"}`,
+                  transition:"border-color 0.1s, background 0.1s" }}>
                 <div style={{ position:"absolute", bottom:0, left:0, right:0,
                   height:`${fill.pct}%`,
-                  background: lane.key==="score"?(isSel||isHov?fill.color:fill.color+"cc"):fill.color+"44",
+                  background: lane.key==="score"
+                    ? (isSel||isHov||isBest ? fill.color : fill.color+"cc")
+                    : fill.color+(isSel||isHov||isWin?"66":"44"),
                   transition:"height 0.35s ease" }} />
                 {val && (
                   <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize: lane.key==="score"?13:9, fontWeight: lane.key==="score"?800:600,
-                    color: lane.key==="score"?(fill.pct>50?"#fff":v.text):(isHov||isSel?"var(--txt-2)":"var(--txt-5)"),
-                    letterSpacing: lane.key==="score"?"-0.3px":"0",
+                    fontSize:lane.key==="score"?13:9, fontWeight:lane.key==="score"?800:600,
+                    color: lane.key==="score"?(fill.pct>50?"#fff":v.text):(isHov||isSel||isWin?"var(--txt-2)":"var(--txt-5)"),
+                    letterSpacing:lane.key==="score"?"-0.3px":"0",
                     transition:"color 0.1s", pointerEvents:"none" }}>
                     {val}
                   </div>
@@ -1687,14 +1711,15 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
         </div>
       ))}
 
-      {/* Hover bar */}
+      {/* Info bar — shows hovered month, falls back to selected */}
       {(() => {
-        const m = hovered!==null ? months[hovered-1] : null;
-        const score = m ? scores[hovered-1] : 0;
+        const activeM = hovered ?? selectedMonth;
+        const m = activeM!==null ? months[activeM-1] : null;
+        const score = m ? scores[activeM-1] : 0;
         const v = m ? verdict(score, m.typhoon) : null;
         return (
           <div style={{ marginTop:8, height:36, borderRadius:"var(--r-sm)", overflow:"hidden",
-            background: m?"var(--txt-1)":"transparent", transition:"background 0.15s",
+            background:m?"var(--txt-1)":"transparent", transition:"background 0.15s",
             display:"flex", alignItems:"center", padding:m?"0 14px":"0", gap:12, flexWrap:"nowrap" }}>
             {m && v && <>
               <span style={{ fontWeight:800, fontSize:13, color:"#f3f1ed", whiteSpace:"nowrap" }}>{m.name}</span>
@@ -1704,21 +1729,27 @@ function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights 
               <span style={{ color:crowdColor(m.crowds), fontSize:12, whiteSpace:"nowrap" }}>{crowdLabel(m.crowds)}</span>
               {m.holidays?.length>0 && <span style={{ color:"#fbbf24", fontSize:12, whiteSpace:"nowrap" }}>📅 {m.holidays[0].name}</span>}
               {m.typhoon!=="none" && <span style={{ color:m.typhoon==="high"?"#f87171":"#fb923c", fontSize:12, whiteSpace:"nowrap" }}>{m.typhoon==="high"?"🌀 Typhoon":"⛈ Storms"}</span>}
-              <span style={{ color:"#555", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>click to expand</span>
+              <span style={{ color:"#555", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>
+                {hovered ? "click to expand" : "selected"}
+              </span>
             </>}
           </div>
         );
       })()}
 
       {/* Legend */}
-      <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap", alignItems:"center" }}>
         {[5,4,3,2,1].map(tier => (
           <div key={tier} style={{ display:"flex", alignItems:"center", gap:4 }}>
             <div style={{ width:8, height:8, borderRadius:2, background:TIERS[tier].badge }} />
             <span style={{ fontSize:10, color:"var(--txt-4)" }}>{TIERS[tier].label}</span>
           </div>
         ))}
-        <div style={{ width:1, height:12, background:"var(--border)" }} />
+        <div style={{ width:1, height:12, background:"var(--border)", flexShrink:0 }} />
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <div style={{ width:12, height:8, borderRadius:2, background:"rgba(16,185,129,0.12)", border:"1px solid #86efac" }} />
+          <span style={{ fontSize:10, color:"var(--txt-4)" }}>Best window</span>
+        </div>
         <div style={{ display:"flex", alignItems:"center", gap:4 }}>
           <div style={{ width:6, height:6, borderRadius:"50%", background:"#dc2626" }} />
           <span style={{ fontSize:10, color:"var(--txt-4)" }}>Holiday</span>
@@ -1738,11 +1769,13 @@ function App() {
   const [weights, setWeights]             = useState(shared?.weights || DEFAULT_WEIGHTS);
   const [passport, setPassport]           = useState(shared?.passport || "US");
   const [viewMode, setViewMode]           = useState("heatmap");
+  const [viewVisible, setViewVisible]     = useState(true);
   const [tempUnit, setTempUnit]           = useState("C");
   const [scoreDeltas, setScoreDeltas]     = useState(null);
   const [deltaKey, setDeltaKey]           = useState(0);
   const [hoveredSummaryMonth, setHoveredSummaryMonth] = useState(null);
   const detailRef        = useRef(null);
+  const viewTabsRef      = useRef(null);
   const prevWeightsRef   = useRef(weights);
   const deltaClearRef    = useRef(null);
   const isFirstWRef      = useRef(true);
@@ -1784,6 +1817,17 @@ function App() {
   // Heatmap cell click: switch city + open month, no reset
   function handleHeatmapPick(slug) { setSelectedCity(slug); }
   function handleSelectMonth(m) { setSelectedMonth(prev => prev===m ? null : m); }
+  function handleCloseDetail() {
+    setSelectedMonth(null);
+    if (viewTabsRef.current) {
+      const y = viewTabsRef.current.getBoundingClientRect().top + window.scrollY - 80;
+      window.scrollTo({ top: Math.max(0, y), behavior:"smooth" });
+    }
+  }
+  function switchView(v) {
+    setViewVisible(false);
+    setTimeout(() => { setViewMode(v); setViewVisible(true); }, 130);
+  }
 
   useEffect(() => {
     if (selectedMonth!==null && detailRef.current) {
@@ -1841,7 +1885,7 @@ function App() {
         <PersonalizePanel weights={weights} onChange={setWeights} />
 
         {/* View toggle */}
-        <div className="view-tabs-bar">
+        <div className="view-tabs-bar" ref={viewTabsRef}>
           <span className="view-tabs-label">All months</span>
           <div className="view-tabs">
             {[
@@ -1851,7 +1895,7 @@ function App() {
             ].map(v => (
               <button key={v.id}
                 className={`view-tab ${viewMode===v.id ? "active" : "inactive"}`}
-                onClick={() => setViewMode(v.id)}>
+                onClick={() => switchView(v.id)}>
                 {v.label}
               </button>
             ))}
@@ -1866,6 +1910,8 @@ function App() {
             ))}
           </div>
         </div>
+
+        <div style={{ opacity: viewVisible ? 1 : 0, transition:"opacity 0.13s ease" }}>
 
         {viewMode==="heatmap" && (
           <div className="view-panel">
@@ -1897,26 +1943,93 @@ function App() {
           </div>
         )}
 
-        {viewMode==="table" && (
-          <table className="month-table">
-            <thead>
-              <tr>
-                <th>Month</th><th>Score</th><th>Temp</th>
-                <th className="col-hide-sm">Rain</th><th>Crowds</th>
-                <th className="col-hide-sm">Hotels</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {cityData.months.map(month => (
-                <MonthRow key={month.m} month={month}
-                  isSelected={selectedMonth===month.m}
-                  onSelect={handleSelectMonth}
-                  tempUnit={tempUnit}
-                  customScore={computeCustomScore(month, weights)}
-                  weights={weights} />
-              ))}
-            </tbody>
-          </table>
+        {viewMode==="table" && (() => {
+          const sorted = [...cityData.months]
+            .map(m => ({ m, score: computeCustomScore(m, weights) }))
+            .sort((a,b) => b.score - a.score);
+          const rankMap = Object.fromEntries(sorted.map((x,i) => [x.m.m, i+1]));
+          const tierGroups = [5,4,3,2,1]
+            .map(tier => ({ tier, items: sorted.filter(x => verdict(x.score, x.m.typhoon).tier === tier) }))
+            .filter(g => g.items.length > 0);
+          return (
+            <table className="month-table">
+              <thead>
+                <tr>
+                  <th>Month</th><th>Score</th><th>Temp</th>
+                  <th className="col-hide-sm">Rain</th><th>Crowds</th>
+                  <th className="col-hide-sm">Hotels</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {tierGroups.flatMap((group, gi) => [
+                  gi > 0 && (
+                    <tr key={`div-${group.tier}`}>
+                      <td colSpan={7} style={{ padding:0, height:1, background:"var(--border-light)" }} />
+                    </tr>
+                  ),
+                  <tr key={`hdr-${group.tier}`}>
+                    <td colSpan={7} style={{ padding:"5px 12px 2px", background:"transparent", borderLeft:"none" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                        <div style={{ width:6, height:6, borderRadius:2, background:TIERS[group.tier].badge, flexShrink:0 }} />
+                        <span style={{ fontSize:10, fontWeight:700, color:TIERS[group.tier].badge,
+                          textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                          {TIERS[group.tier].label}
+                        </span>
+                        <span style={{ fontSize:10, color:"var(--txt-5)" }}>
+                          {TIERS[group.tier].emoji}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>,
+                  ...group.items.map(x => (
+                    <MonthRow key={x.m.m} month={x.m}
+                      isSelected={selectedMonth===x.m.m}
+                      onSelect={handleSelectMonth}
+                      tempUnit={tempUnit}
+                      customScore={x.score}
+                      weights={weights}
+                      rank={rankMap[x.m.m]} />
+                  ))
+                ].filter(Boolean))}
+              </tbody>
+            </table>
+          );
+        })()}
+
+        </div>{/* end fade wrapper */}
+
+        {selectedMonth===null && (
+          <div style={{ marginTop:10, padding:"18px 24px",
+            background:"var(--surface)", border:"1px dashed var(--border)",
+            borderRadius:"var(--r-lg)", display:"flex", alignItems:"center", gap:16 }}>
+            <span style={{ fontSize:22, flexShrink:0, opacity:0.35 }}>↑</span>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:"var(--txt-3)" }}>
+                Click any month to see the full breakdown
+              </div>
+              <div style={{ fontSize:11, color:"var(--txt-5)", marginTop:3 }}>
+                Weather · Crowds · Prices · Events & Holidays
+              </div>
+            </div>
+            {bestMonths?.length>0 && (
+              <div style={{ marginLeft:"auto", display:"flex", gap:5, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                <span style={{ fontSize:10, color:"var(--txt-5)", alignSelf:"center", whiteSpace:"nowrap" }}>Best months</span>
+                {bestMonths.map(mn => {
+                  const m = cityData.months[mn-1];
+                  const sc = computeCustomScore(m, weights);
+                  const v = verdict(sc, m.typhoon);
+                  return (
+                    <button key={mn} onClick={() => handleSelectMonth(mn)}
+                      style={{ padding:"3px 10px", borderRadius:99, fontSize:11, fontWeight:700,
+                        border:`1px solid ${v.border}`, background:v.bg, color:v.text,
+                        cursor:"pointer", fontFamily:"inherit", transition:"all 0.12s" }}>
+                      {m.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {selectedMonth!==null && (
@@ -1930,7 +2043,8 @@ function App() {
               planningYear={planningYear}
               onYearChange={setPlanningYear}
               tempUnit={tempUnit}
-              onClose={() => setSelectedMonth(null)}
+              weights={weights}
+              onClose={handleCloseDetail}
             />
           </div>
         )}
