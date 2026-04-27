@@ -3,6 +3,7 @@
 Travel planning heatmap — visualizes city conditions across months by overlaying weather comfort, tourist crowds, holidays, and practical notes on a single timeline.
 
 **Live:** https://offpeak-web-production.up.railway.app
+**Local v7** http://localhost:5173/design/offpeak-v7-share-visa.html
 
 ## Run locally
 

@@ -1,0 +1,1893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>offpeak — v8</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+/* ── Design tokens ───────────────────────────────────────────────────────── */
+:root {
+  --brand:        #0d9488;
+  --brand-dim:    #0f766e;
+  --brand-light:  #f0fdfa;
+  --brand-border: #99f6e4;
+
+  --bg:           #f3f1ed;
+  --surface:      #ffffff;
+  --border:       #e2ded7;
+  --border-light: #f0ede8;
+
+  --txt-1: #1c1917;
+  --txt-2: #57534e;
+  --txt-3: #78716c;
+  --txt-4: #a8a29e;
+  --txt-5: #c4bfb8;
+
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: var(--bg);
+  color: var(--txt-1);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.18s ease-out; }
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.wrap { max-width: 1080px; margin: 0 auto; padding: 28px 16px 80px; }
+
+/* ── Nav ─────────────────────────────────────────────────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(243,241,237,0.96);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+
+.nav-row1 {
+  height: 52px;
+  display: flex; align-items: center; gap: 8px;
+}
+.nav-logo {
+  font-weight: 800; font-size: 16px; letter-spacing: -0.5px;
+  color: var(--brand); flex-shrink: 0; text-decoration: none;
+}
+.nav-beta {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--brand);
+  border: 1px solid var(--brand-border);
+  padding: 2px 6px; border-radius: 99px; flex-shrink: 0;
+}
+.nav-sep {
+  width: 1px; height: 18px; background: var(--border); flex-shrink: 0;
+}
+.nav-city-group { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.nav-country { font-size: 12px; color: var(--txt-4); white-space: nowrap; flex-shrink: 0; }
+
+.nav-years { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.nav-years-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--txt-5); padding: 0 4px; white-space: nowrap;
+}
+
+.nav-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* Mobile: year pills go to row 2 */
+.nav-row2 {
+  display: none;
+  height: 38px; align-items: center; gap: 4px;
+  overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none;
+  border-top: 1px solid var(--border-light);
+  padding: 0 2px;
+}
+.nav-row2::-webkit-scrollbar { display: none; }
+
+@media (max-width: 700px) {
+  .nav-years { display: none; }
+  .nav-country { display: none; }
+  .nav-row2 { display: flex; }
+}
+@media (max-width: 460px) {
+  .nav-beta { display: none; }
+}
+
+/* ── Year pills ──────────────────────────────────────────────────────────── */
+.year-pill {
+  padding: 3px 9px; border-radius: var(--r-xs);
+  font-size: 12px; font-weight: 600;
+  border: none; cursor: pointer;
+  transition: all 0.12s; font-family: inherit;
+  white-space: nowrap; flex-shrink: 0;
+}
+.year-pill.active  { background: var(--txt-1); color: #fff; }
+.year-pill.inactive { background: transparent; color: var(--txt-4); }
+.year-pill.inactive:hover { background: var(--border-light); color: var(--txt-2); }
+
+/* ── City dropdown ───────────────────────────────────────────────────────── */
+.city-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 5px 10px 5px 12px; font-family: inherit;
+  font-size: 13px; font-weight: 700; color: var(--txt-1);
+  cursor: pointer; transition: border-color 0.15s;
+  white-space: nowrap; min-width: 0; max-width: 200px;
+}
+.city-btn:hover { border-color: var(--brand); }
+.city-chevron { font-size: 10px; color: var(--txt-4); flex-shrink: 0; transition: transform 0.15s; }
+.city-chevron.open { transform: rotate(180deg); }
+
+.city-dropdown-wrap { position: relative; }
+.city-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-lg);
+  min-width: 220px; max-width: 280px; z-index: 100; overflow: hidden;
+}
+.city-search {
+  width: 100%; border: none; border-bottom: 1px solid var(--border-light);
+  padding: 10px 14px; font-family: inherit; font-size: 13px;
+  outline: none; background: #fafaf8; color: var(--txt-1);
+}
+.city-list { max-height: 280px; overflow-y: auto; padding: 4px; }
+.city-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: var(--r-xs); cursor: pointer;
+  font-size: 13px; color: var(--txt-1); transition: background 0.1s; font-weight: 500;
+}
+.city-item:hover { background: var(--brand-light); }
+.city-item.active { background: var(--brand); color: #fff; font-weight: 700; }
+.city-item-country { font-size: 11px; opacity: 0.5; }
+
+/* ── Summary banner ──────────────────────────────────────────────────────── */
+.summary-banner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.summary-best { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.summary-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--txt-4); white-space: nowrap;
+}
+.summary-window {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--brand-light); border: 1px solid var(--brand-border);
+  border-radius: var(--r-xs); padding: 4px 10px;
+  font-size: 12px; font-weight: 700; color: var(--brand-dim);
+  white-space: nowrap;
+}
+.summary-month-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: var(--r-xs);
+  border: 1px solid; cursor: pointer; font-family: inherit;
+  transition: opacity 0.12s;
+}
+.summary-month-btn:hover { opacity: 0.8; }
+.summary-skip { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.summary-skip-btn {
+  font-size: 11px; font-weight: 700; padding: 3px 8px;
+  border-radius: var(--r-xs); background: #fef2f2;
+  color: #991b1b; border: 1px solid #fca5a5;
+  cursor: pointer; font-family: inherit; transition: opacity 0.12s;
+}
+.summary-skip-btn:hover { opacity: 0.7; }
+
+/* ── Personalize panel ───────────────────────────────────────────────────── */
+.preset-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.preset-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--txt-5); flex-shrink: 0;
+}
+.preset-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: var(--r-sm);
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.12s; border: 1px solid transparent;
+}
+.preset-btn.active {
+  background: var(--txt-1); color: #fff; border-color: var(--txt-1);
+}
+.preset-btn.inactive {
+  background: var(--border-light); color: var(--txt-2); border-color: transparent;
+}
+.preset-btn.inactive:hover { background: var(--border); color: var(--txt-1); }
+
+.customize-toggle {
+  margin-left: auto; font-size: 11px; font-weight: 600;
+  color: var(--brand); background: none; border: none;
+  cursor: pointer; font-family: inherit; padding: 4px 0; flex-shrink: 0;
+}
+.slider-grid {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 16px 18px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px;
+  margin-top: 10px;
+}
+@media (max-width: 520px) { .slider-grid { grid-template-columns: 1fr; } }
+
+/* ── View tabs ───────────────────────────────────────────────────────────── */
+.view-tabs-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0 10px; padding-top: 14px;
+  border-top: 1px solid var(--border-light);
+}
+.view-tabs-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--txt-5); flex-shrink: 0;
+}
+.view-tabs {
+  display: flex; background: var(--border-light);
+  border-radius: var(--r-sm); padding: 2px; gap: 1px;
+}
+.view-tab {
+  padding: 4px 14px; border-radius: var(--r-xs);
+  font-size: 11px; font-weight: 700; border: none;
+  cursor: pointer; font-family: inherit; transition: all 0.12s;
+}
+.view-tab.active { background: var(--surface); color: var(--txt-1); box-shadow: var(--shadow-sm); }
+.view-tab.inactive { background: transparent; color: var(--txt-4); }
+.view-tab.inactive:hover { color: var(--txt-2); }
+
+.temp-toggle { display: flex; gap: 2px; margin-left: auto; }
+.temp-btn {
+  padding: 3px 8px; border-radius: var(--r-xs);
+  font-size: 12px; font-weight: 600; border: none;
+  cursor: pointer; transition: all 0.12s; font-family: inherit;
+}
+.temp-btn.active { background: var(--txt-1); color: #fff; }
+.temp-btn.inactive { background: transparent; color: var(--txt-4); }
+.temp-btn.inactive:hover { color: var(--txt-2); }
+
+/* ── View containers ─────────────────────────────────────────────────────── */
+.view-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 18px 20px;
+}
+
+/* ── Month table ─────────────────────────────────────────────────────────── */
+.month-table { width: 100%; border-collapse: separate; border-spacing: 0 3px; }
+.month-table thead th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--txt-5);
+  padding: 0 10px 6px; text-align: left; white-space: nowrap;
+}
+.month-row { background: var(--surface); cursor: pointer; transition: background 0.1s; }
+.month-row td {
+  padding: 9px 10px; border: none; vertical-align: middle;
+}
+.month-row td:first-child {
+  border-left: 3px solid var(--border-light);
+  border-radius: var(--r-sm) 0 0 var(--r-sm); padding-left: 12px;
+}
+.month-row td:last-child { border-radius: 0 var(--r-sm) var(--r-sm) 0; text-align: right; padding-right: 12px; }
+.month-row:hover:not(.month-row-selected) td { background: #f8f7f4; }
+.month-row:hover:not(.month-row-selected) td:first-child { border-left-color: var(--border); }
+.mr-name { font-size: 14px; font-weight: 700; color: var(--txt-1); letter-spacing: -0.2px; }
+.mr-score { font-size: 13px; font-weight: 800; }
+.mr-temp { font-size: 11px; color: var(--txt-3); white-space: nowrap; }
+.mr-rain { font-size: 11px; color: var(--txt-4); white-space: nowrap; }
+.mr-crowd { font-size: 11px; font-weight: 600; white-space: nowrap; }
+@media (max-width: 640px) {
+  .col-hide-sm { display: none; }
+  .month-table thead th, .month-row td { padding: 10px 8px; }
+  .month-row td:first-child { padding-left: 10px; }
+}
+@media (max-width: 400px) { .col-hide-xs { display: none; } }
+
+/* ── Section label ───────────────────────────────────────────────────────── */
+.col-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--txt-4); margin-bottom: 12px;
+}
+.section-title {
+  font-size: 14px; font-weight: 700; color: var(--txt-1);
+  padding-left: 10px; border-left: 3px solid var(--brand);
+}
+
+/* ── Detail panel ────────────────────────────────────────────────────────── */
+.detail-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); margin-top: 10px; overflow: hidden;
+}
+.detail-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 24px; border-bottom: 1px solid var(--border-light);
+}
+.detail-header-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.detail-emoji { font-size: 30px; flex-shrink: 0; }
+.detail-month-name { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; line-height: 1; }
+.detail-badges { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.detail-verdict-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 99px; color: #fff; }
+.detail-warning { font-size: 11px; font-weight: 600; }
+.detail-score-block { text-align: right; flex-shrink: 0; padding-left: 20px; }
+.detail-score-num { font-size: 32px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.detail-score-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; opacity: 0.45; margin-top: 2px; }
+.close-btn {
+  background: none; border: none; cursor: pointer; padding: 6px;
+  color: var(--txt-4); font-size: 14px; border-radius: var(--r-xs);
+  line-height: 1; transition: color 0.12s; margin-left: 12px; flex-shrink: 0;
+}
+.close-btn:hover { color: var(--txt-1); }
+
+.detail-body { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border-light); }
+.detail-col { padding: 18px 22px; border-right: 1px solid var(--border-light); }
+.detail-col:last-child { border-right: none; }
+.detail-events { padding: 18px 22px; }
+
+.weather-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.weather-tile { background: #f8f7f5; border-radius: var(--r-xs); padding: 9px 10px; }
+.weather-tile-full { grid-column: 1 / -1; }
+.wt-label { font-size: 10px; color: var(--txt-4); margin-bottom: 2px; }
+.wt-value { font-size: 14px; font-weight: 700; color: var(--txt-1); }
+
+.bar-row { margin-bottom: 14px; }
+.bar-label-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.bar-label { font-size: 12px; font-weight: 600; color: var(--txt-1); }
+.bar-value { font-size: 12px; font-weight: 700; }
+.bar-track { height: 6px; background: var(--border-light); border-radius: 99px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+.bar-ends { display: flex; justify-content: space-between; margin-top: 3px; font-size: 10px; color: var(--txt-5); }
+
+.holiday-item {
+  display: flex; gap: 10px; padding: 10px 12px;
+  border-radius: var(--r-sm); margin-bottom: 6px; border: 1px solid;
+}
+.holiday-icon { font-size: 15px; flex-shrink: 0; }
+.holiday-body { flex: 1; min-width: 0; }
+.holiday-name { font-size: 12px; font-weight: 700; color: var(--txt-1); line-height: 1.3; }
+.holiday-dates { font-size: 11px; color: var(--txt-3); margin-top: 3px; }
+.holiday-impact { font-size: 10px; margin-top: 3px; color: var(--txt-3); }
+.no-holiday { padding: 10px 12px; border-radius: var(--r-sm); font-size: 12px; }
+.quick-take { font-size: 13px; color: var(--txt-2); line-height: 1.75; }
+
+/* ── Heatmap ─────────────────────────────────────────────────────────────── */
+.heatmap-compare-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
+}
+.heatmap-city-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; color: #fff;
+}
+.heatmap-city-remove {
+  background: rgba(255,255,255,0.25); border: none; border-radius: 50%;
+  width: 14px; height: 14px; cursor: pointer; color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center; padding: 0; font-family: inherit;
+}
+.heatmap-add-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+  border: 1px dashed var(--border); background: var(--surface);
+  color: var(--txt-4); cursor: pointer; font-family: inherit; transition: all 0.12s;
+}
+.heatmap-add-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.footer {
+  max-width: 1080px; margin: 0 auto;
+  padding: 20px 16px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.footer-brand { font-size: 13px; font-weight: 800; color: var(--brand); letter-spacing: -0.3px; }
+.footer-note { font-size: 11px; color: var(--txt-4); }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .detail-body { grid-template-columns: 1fr; }
+  .detail-body .detail-col { border-right: none; border-bottom: 1px solid var(--border-light); }
+  .detail-events > div { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 16px 12px 64px; }
+  .detail-header { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+  .detail-score-num { font-size: 26px !important; }
+  .detail-body .detail-col { padding: 14px 16px; }
+  .detail-events { padding: 14px 16px; }
+  .detail-events > div { grid-template-columns: 1fr !important; }
+  .city-btn { max-width: 130px; font-size: 12px; }
+  .summary-banner { gap: 10px; }
+  .summary-skip { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useEffect, useRef } = React;
+
+// ─── Tier colour system — semantic, not MMORPG ───────────────────────────────
+// Perfect: emerald · Great: brand teal · Good: amber · Fair: orange · Skip: red
+const TIERS = {
+  5: { label:"Perfect", emoji:"✨", badge:"#059669", bg:"#ecfdf5", border:"#a7f3d0", text:"#065f46" },
+  4: { label:"Great",   emoji:"👌", badge:"#0d9488", bg:"#f0fdfa", border:"#99f6e4", text:"#0f766e" },
+  3: { label:"Good",    emoji:"🙂", badge:"#d97706", bg:"#fffbeb", border:"#fde68a", text:"#92400e" },
+  2: { label:"Fair",    emoji:"😐", badge:"#ea580c", bg:"#fff7ed", border:"#fdba74", text:"#9a3412" },
+  1: { label:"Skip",    emoji:"🌧", badge:"#dc2626", bg:"#fef2f2", border:"#fca5a5", text:"#991b1b" },
+};
+
+function verdict(overall, typhoon) {
+  let tier = overall >= 8.5 ? 5 : overall >= 7.0 ? 4 : overall >= 5.5 ? 3 : overall >= 4.0 ? 2 : 1;
+  const t = { ...TIERS[tier], tier };
+  if (typhoon === "high")          t.warning = "⚠️ Typhoon risk";
+  else if (typhoon === "moderate") t.warning = "⛈ Storm season";
+  return t;
+}
+
+// ─── Holiday helpers ─────────────────────────────────────────────────────────
+const IMPACT_RANK   = { extreme:5, very_high:4, high:3, moderate:2, low:1 };
+const IMPACT_LABEL  = { extreme:"Extreme", very_high:"V.High", high:"High", moderate:"Mod", low:"Low" };
+const IMPACT_COLORS = { extreme:"#dc2626", very_high:"#ea580c", high:"#d97706", moderate:"#a16207", low:"#16a34a" };
+const IMPACT_BG     = { extreme:"#fee2e2", very_high:"#ffedd5", high:"#fef3c7", moderate:"#fefce8", low:"#dcfce7" };
+
+function crowdLabel(idx) {
+  return idx <= 2 ? "Quiet" : idx <= 4 ? "Moderate" : idx <= 6.5 ? "Busy" : idx <= 8.5 ? "Very busy" : "Packed";
+}
+function crowdColor(idx) {
+  return idx > 8 ? "#dc2626" : idx > 6.5 ? "#ea580c" : idx > 4 ? "#ca8a04" : "#059669";
+}
+function weatherEmoji(m) {
+  if (m.typhoon === "high" || m.typhoon === "moderate") return "⛈";
+  if (m.rainDays >= 16) return "🌧";
+  if (m.rainDays >= 10) return "🌤";
+  if (m.high >= 33)     return "🌞";
+  return "☀️";
+}
+function fmtTemp(c, unit) {
+  return unit === "F" ? Math.round(c * 9/5 + 32) + "°F" : c + "°C";
+}
+function fmtDateRange(start, end, days) {
+  const fmt = iso => {
+    const [,mm,dd] = iso.split("-");
+    const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${M[+mm-1]} ${+dd}`;
+  };
+  if (!end || start === end) return `${fmt(start)} · 1 day`;
+  return `${fmt(start)} – ${fmt(end)} · ${days} day${days !== 1 ? "s" : ""}`;
+}
+
+// ─── City data ───────────────────────────────────────────────────────────────
+const HK_MONTHS = [
+  { m:1,  name:"Jan", high:18, low:13, humidity:72, rainDays:6,  rainfall:33,  feels:16, typhoon:"none",     overall:7.2, comfort:10, crowds:6.9, priceIdx:95,
+    holidays:[{ name:"Lunar New Year", dateStart:"2027-01-28", dateEnd:"2027-02-03", days:7, crowdImpact:"very_high", priceImpact:"high", closureImpact:"significant" }] },
+  { m:2,  name:"Feb", high:17, low:13, humidity:80, rainDays:9,  rainfall:48,  feels:15, typhoon:"none",     overall:5.6, comfort:9,  crowds:9.4, priceIdx:110,
+    holidays:[{ name:"Lunar New Year peak", dateStart:"2027-02-01", dateEnd:"2027-02-07", days:7, crowdImpact:"extreme", priceImpact:"high", closureImpact:"significant" }] },
+  { m:3,  name:"Mar", high:20, low:16, humidity:82, rainDays:11, rainfall:68,  feels:19, typhoon:"none",     overall:6.4, comfort:9,  crowds:8.6, priceIdx:98,  holidays:[] },
+  { m:4,  name:"Apr", high:24, low:20, humidity:84, rainDays:12, rainfall:148, feels:24, typhoon:"none",     overall:6.4, comfort:9,  crowds:8.9, priceIdx:97,
+    holidays:[{ name:"Easter", dateStart:"2027-04-02", dateEnd:"2027-04-05", days:4, crowdImpact:"high", priceImpact:"moderate", closureImpact:"minimal" }] },
+  { m:5,  name:"May", high:28, low:24, humidity:83, rainDays:16, rainfall:292, feels:30, typhoon:"low",      overall:4.2, comfort:4,  crowds:9.4, priceIdx:92,  holidays:[] },
+  { m:6,  name:"Jun", high:30, low:26, humidity:83, rainDays:19, rainfall:394, feels:33, typhoon:"moderate", overall:3.6, comfort:3,  crowds:10,  priceIdx:88,
+    holidays:[{ name:"Dragon Boat Festival", dateStart:"2027-06-09", dateEnd:"2027-06-09", days:1, crowdImpact:"moderate", priceImpact:"low", closureImpact:"none" }] },
+  { m:7,  name:"Jul", high:31, low:27, humidity:83, rainDays:17, rainfall:385, feels:34, typhoon:"moderate", overall:3.6, comfort:3,  crowds:10,  priceIdx:87,  holidays:[] },
+  { m:8,  name:"Aug", high:31, low:27, humidity:82, rainDays:17, rainfall:367, feels:34, typhoon:"high",     overall:5.5, comfort:4,  crowds:5.2, priceIdx:86,  holidays:[] },
+  { m:9,  name:"Sep", high:29, low:25, humidity:79, rainDays:15, rainfall:257, feels:31, typhoon:"high",     overall:7.6, comfort:10, crowds:1.0, priceIdx:89,  holidays:[] },
+  { m:10, name:"Oct", high:26, low:22, humidity:72, rainDays:8,  rainfall:100, feels:26, typhoon:"moderate", overall:6.1, comfort:6,  crowds:5.8, priceIdx:102,
+    holidays:[{ name:"National Day Golden Week", dateStart:"2027-10-01", dateEnd:"2027-10-07", days:7, crowdImpact:"very_high", priceImpact:"high", closureImpact:"minimal" }] },
+  { m:11, name:"Nov", high:22, low:17, humidity:65, rainDays:6,  rainfall:36,  feels:21, typhoon:"none",     overall:9.3, comfort:10, crowds:2.7, priceIdx:105, holidays:[] },
+  { m:12, name:"Dec", high:19, low:14, humidity:64, rainDays:5,  rainfall:26,  feels:17, typhoon:"none",     overall:7.1, comfort:10, crowds:7.2, priceIdx:112,
+    holidays:[{ name:"Christmas & New Year", dateStart:"2027-12-24", dateEnd:"2027-12-31", days:8, crowdImpact:"high", priceImpact:"high", closureImpact:"minimal" }] },
+];
+
+const DN_MONTHS = [
+  { m:1,  name:"Jan", high:24, low:19, humidity:84, rainDays:11, rainfall:96,  feels:23, typhoon:"none",     overall:6.1, comfort:7,  crowds:5.5, priceIdx:95,
+    holidays:[{ name:"Tết preparation", dateStart:"2027-01-22", dateEnd:"2027-01-27", days:6, crowdImpact:"moderate", priceImpact:"moderate", closureImpact:"minimal" }] },
+  { m:2,  name:"Feb", high:25, low:20, humidity:82, rainDays:4,  rainfall:22,  feels:24, typhoon:"none",     overall:7.4, comfort:9,  crowds:7.8, priceIdx:108,
+    holidays:[{ name:"Tết (Vietnamese New Year)", dateStart:"2027-01-28", dateEnd:"2027-02-03", days:7, crowdImpact:"extreme", priceImpact:"high", closureImpact:"significant" }] },
+  { m:3,  name:"Mar", high:28, low:22, humidity:79, rainDays:3,  rainfall:13,  feels:28, typhoon:"none",     overall:8.9, comfort:10, crowds:3.2, priceIdx:100, holidays:[] },
+  { m:4,  name:"Apr", high:32, low:25, humidity:77, rainDays:4,  rainfall:18,  feels:34, typhoon:"none",     overall:8.2, comfort:9,  crowds:4.1, priceIdx:98,
+    holidays:[{ name:"Reunification Day", dateStart:"2027-04-30", dateEnd:"2027-05-01", days:2, crowdImpact:"moderate", priceImpact:"low", closureImpact:"minimal" }] },
+  { m:5,  name:"May", high:35, low:27, humidity:77, rainDays:9,  rainfall:68,  feels:39, typhoon:"none",     overall:6.0, comfort:5,  crowds:6.2, priceIdx:93,  holidays:[] },
+  { m:6,  name:"Jun", high:36, low:28, humidity:73, rainDays:6,  rainfall:42,  feels:40, typhoon:"none",     overall:5.5, comfort:4,  crowds:7.5, priceIdx:88,  holidays:[] },
+  { m:7,  name:"Jul", high:36, low:28, humidity:72, rainDays:7,  rainfall:52,  feels:40, typhoon:"none",     overall:5.3, comfort:4,  crowds:8.0, priceIdx:86,  holidays:[] },
+  { m:8,  name:"Aug", high:35, low:27, humidity:75, rainDays:12, rainfall:108, feels:38, typhoon:"low",      overall:5.0, comfort:4,  crowds:7.5, priceIdx:85,  holidays:[] },
+  { m:9,  name:"Sep", high:31, low:25, humidity:84, rainDays:18, rainfall:350, feels:30, typhoon:"moderate", overall:3.5, comfort:3,  crowds:4.0, priceIdx:84,
+    holidays:[{ name:"Mid-Autumn Festival", dateStart:"2027-09-25", dateEnd:"2027-09-25", days:1, crowdImpact:"low", priceImpact:"low", closureImpact:"none" }] },
+  { m:10, name:"Oct", high:27, low:22, humidity:88, rainDays:22, rainfall:550, feels:26, typhoon:"high",     overall:2.8, comfort:2,  crowds:3.5, priceIdx:82,  holidays:[] },
+  { m:11, name:"Nov", high:25, low:21, humidity:88, rainDays:18, rainfall:310, feels:24, typhoon:"moderate", overall:4.0, comfort:4,  crowds:4.0, priceIdx:88,  holidays:[] },
+  { m:12, name:"Dec", high:24, low:19, humidity:86, rainDays:14, rainfall:180, feels:23, typhoon:"none",     overall:5.8, comfort:6,  crowds:5.0, priceIdx:96,  holidays:[] },
+];
+
+function makeMonths(profile) {
+  const { best, worst, typhoon: tyMap, highs, lows, crowds } = profile;
+  const NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return NAMES.map((name, i) => {
+    const m = i + 1;
+    const isBest  = best.includes(m);
+    const isWorst = worst.includes(m);
+    const overall = isBest  ? +(6.8 + Math.random() * 2.2).toFixed(1)
+                  : isWorst ? +(2.5 + Math.random() * 1.8).toFixed(1)
+                  : +(4.5 + Math.random() * 2.0).toFixed(1);
+    const rainDays = isWorst ? 12 + Math.floor(Math.random() * 10) : isBest ? 2 + Math.floor(Math.random() * 6) : 6 + Math.floor(Math.random() * 8);
+    return {
+      m, name, high: highs[i], low: lows[i],
+      humidity: 70 + Math.floor(Math.random() * 20),
+      rainDays, rainfall: rainDays * (8 + Math.floor(Math.random() * 12)),
+      feels: highs[i] - 2 + Math.floor(Math.random() * 5),
+      typhoon: tyMap[i] || "none",
+      overall: Math.min(9.9, overall),
+      comfort: Math.min(10, Math.round(isBest ? 8 + Math.random() * 2 : isWorst ? 1 + Math.random() * 4 : 4 + Math.random() * 4)),
+      crowds: crowds[i],
+      priceIdx: 85 + Math.floor(Math.random() * 40),
+      holidays: [],
+    };
+  });
+}
+
+const CITIES = {
+  "hong-kong":    { city:"Hong Kong",       country:"China SAR 🇭🇰", months: HK_MONTHS },
+  "da-nang":      { city:"Da Nang",          country:"Vietnam 🇻🇳",   months: DN_MONTHS },
+  "tokyo":        { city:"Tokyo",            country:"Japan 🇯🇵",      months: makeMonths({ best:[3,4,5,10,11], worst:[7,8], typhoon:Array(12).fill("none"), highs:[10,11,14,19,23,26,30,32,28,22,16,12], lows:[3,3,6,11,15,19,23,24,20,14,8,4], crowds:[6,5,7,8,7,6,8,7,6,8,7,9] }) },
+  "bangkok":      { city:"Bangkok",          country:"Thailand 🇹🇭",   months: makeMonths({ best:[11,12,1,2], worst:[4,5,9,10], typhoon:Array(12).fill("none"), highs:[33,34,35,37,35,34,33,33,33,33,32,32], lows:[21,22,24,26,26,26,26,26,25,24,22,21], crowds:[7,6,5,4,3,4,5,5,4,5,6,8] }) },
+  "bali":         { city:"Bali",             country:"Indonesia 🇮🇩",  months: makeMonths({ best:[5,6,7,8,9], worst:[1,2,12], typhoon:Array(12).fill("none"), highs:[30,29,30,31,31,30,29,29,30,31,31,31], lows:[23,23,23,24,24,23,22,22,23,24,24,23], crowds:[6,5,4,5,7,8,9,9,8,6,5,6] }) },
+  "singapore":    { city:"Singapore",        country:"Singapore 🇸🇬",  months: makeMonths({ best:[2,3,4,5,6], worst:[11,12,1], typhoon:Array(12).fill("none"), highs:[31,32,32,33,33,33,32,32,32,32,31,31], lows:[24,24,25,25,26,26,26,26,25,25,24,24], crowds:[5,5,6,6,7,7,8,7,6,7,8,7] }) },
+  "seoul":        { city:"Seoul",            country:"Korea 🇰🇷",      months: makeMonths({ best:[4,5,9,10], worst:[1,2,7,8], typhoon:["none","none","none","none","none","none","low","low","none","none","none","none"], highs:[2,4,11,18,23,28,30,31,25,18,10,3], lows:[-5,-3,2,8,13,18,22,22,15,7,1,-4], crowds:[4,4,6,8,7,6,7,6,7,7,5,8] }) },
+  "barcelona":    { city:"Barcelona",        country:"Spain 🇪🇸",      months: makeMonths({ best:[5,6,9,10], worst:[7,8,12,1], typhoon:Array(12).fill("none"), highs:[13,14,16,19,23,27,30,30,27,22,17,13], lows:[5,6,8,11,15,19,22,22,19,15,9,6], crowds:[4,4,5,6,7,8,9,9,8,6,4,4] }) },
+  "lisbon":       { city:"Lisbon",           country:"Portugal 🇵🇹",   months: makeMonths({ best:[4,5,6,9,10], worst:[11,12,1,2], typhoon:Array(12).fill("none"), highs:[15,16,18,20,23,27,29,29,27,22,18,15], lows:[8,9,10,12,14,17,19,19,17,14,11,8], crowds:[3,3,4,5,6,7,8,8,7,6,4,3] }) },
+  "maldives":     { city:"Maldives",         country:"Maldives 🇲🇻",   months: makeMonths({ best:[1,2,11,12], worst:[5,6,7,8], typhoon:Array(12).fill("none"), highs:[30,31,32,32,31,30,30,30,30,30,30,30], lows:[25,25,26,27,27,26,26,26,26,26,25,25], crowds:[8,7,5,4,3,2,2,2,3,4,6,8] }) },
+  "phuket":       { city:"Phuket",           country:"Thailand 🇹🇭",   months: makeMonths({ best:[1,2,3,4,12], worst:[5,6,7,8,9], typhoon:Array(12).fill("none"), highs:[32,33,34,34,33,32,32,32,31,32,32,32], lows:[23,24,25,26,26,26,25,25,25,25,24,23], crowds:[8,7,6,5,3,2,2,2,3,4,5,8] }) },
+  "kyoto":        { city:"Kyoto",            country:"Japan 🇯🇵",      months: makeMonths({ best:[3,4,10,11], worst:[7,8], typhoon:Array(12).fill("none"), highs:[9,10,14,20,25,29,33,34,29,23,16,11], lows:[1,2,5,10,15,20,24,25,20,13,7,2], crowds:[5,5,9,9,7,6,7,6,5,8,7,7] }) },
+  "hanoi":        { city:"Hanoi",            country:"Vietnam 🇻🇳",   months: makeMonths({ best:[10,11,3,4], worst:[6,7,8,9], typhoon:["none","none","none","none","none","none","low","low","moderate","moderate","none","none"], highs:[18,20,23,28,33,34,34,33,31,28,23,19], lows:[13,14,16,20,24,26,26,26,24,21,17,14], crowds:[5,6,5,6,5,5,5,4,3,4,5,5] }) },
+  "chiang-mai":   { city:"Chiang Mai",       country:"Thailand 🇹🇭",   months: makeMonths({ best:[11,12,1,2], worst:[3,4,9,10], typhoon:Array(12).fill("none"), highs:[29,32,36,38,35,32,30,30,30,30,29,28], lows:[12,13,18,22,24,25,25,24,24,23,19,13], crowds:[7,6,5,4,3,3,4,4,3,3,5,7] }) },
+  "taipei":       { city:"Taipei",           country:"Taiwan 🇹🇼",     months: makeMonths({ best:[10,11,4,5], worst:[6,7,8,1], typhoon:["none","none","none","none","none","none","high","high","moderate","low","none","none"], highs:[18,18,21,26,30,33,35,34,31,27,23,19], lows:[13,13,15,19,23,26,27,27,25,22,18,14], crowds:[4,4,5,6,6,5,5,5,5,6,5,6] }) },
+  "kuala-lumpur": { city:"Kuala Lumpur",     country:"Malaysia 🇲🇾",  months: makeMonths({ best:[6,7,2,3], worst:[10,11], typhoon:Array(12).fill("none"), highs:[33,34,34,34,33,33,33,33,33,32,31,32], lows:[24,24,25,25,25,25,25,25,25,24,24,24], crowds:[5,5,5,6,6,6,6,5,5,5,6,7] }) },
+  "osaka":        { city:"Osaka",            country:"Japan 🇯🇵",      months: makeMonths({ best:[3,4,10,11], worst:[6,7,8], typhoon:Array(12).fill("none"), highs:[10,11,14,20,25,29,33,35,29,23,17,12], lows:[2,3,6,11,16,21,25,26,21,14,8,3], crowds:[5,5,8,9,7,6,7,6,5,7,7,7] }) },
+  "istanbul":     { city:"Istanbul",         country:"Turkey 🇹🇷",     months: makeMonths({ best:[4,5,6,9,10], worst:[1,2,12], typhoon:Array(12).fill("none"), highs:[9,10,13,17,22,27,29,29,25,20,15,10], lows:[3,3,5,9,13,17,20,21,17,12,8,4], crowds:[3,4,5,6,7,8,8,7,7,6,4,3] }) },
+  "prague":       { city:"Prague",           country:"Czechia 🇨🇿",    months: makeMonths({ best:[5,6,7,8,9], worst:[11,12,1,2], typhoon:Array(12).fill("none"), highs:[2,4,10,15,20,23,25,25,20,14,7,3], lows:[-3,-2,1,5,10,13,15,14,10,6,2,-2], crowds:[3,3,4,6,7,7,8,8,7,6,4,4] }) },
+  "ho-chi-minh":  { city:"Ho Chi Minh City", country:"Vietnam 🇻🇳",   months: makeMonths({ best:[1,2,3,4,12], worst:[5,6,7,8,9,10,11], typhoon:Array(12).fill("none"), highs:[33,34,35,36,34,32,31,31,31,31,31,32], lows:[21,22,23,24,25,25,25,25,24,24,23,22], crowds:[5,5,4,5,4,4,4,3,3,3,4,6] }) },
+};
+
+// ─── Passport & Visa ─────────────────────────────────────────────────────────
+const PASSPORTS = [
+  { id:"US", flag:"🇺🇸", label:"US" },
+  { id:"EU", flag:"🇪🇺", label:"EU" },
+  { id:"UK", flag:"🇬🇧", label:"UK" },
+  { id:"AU", flag:"🇦🇺", label:"AU" },
+  { id:"RU", flag:"🇷🇺", label:"RU" },
+  { id:"CN", flag:"🇨🇳", label:"CN" },
+  { id:"IN", flag:"🇮🇳", label:"IN" },
+  { id:"JP", flag:"🇯🇵", label:"JP" },
+];
+
+const VISA_DATA = {
+  "hong-kong":    { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"special",   IN:"visa-free",      JP:"visa-free" },
+  "da-nang":      { US:"e-visa",    EU:"e-visa",    UK:"e-visa",    AU:"e-visa",    RU:"e-visa",    CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+  "tokyo":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"n/a" },
+  "bangkok":      { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "bali":         { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "singapore":    { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-free",      JP:"visa-free" },
+  "seoul":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"required",   IN:"required",       JP:"visa-free" },
+  "barcelona":    { US:"visa-free", EU:"n/a",       UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"visa-free" },
+  "lisbon":       { US:"visa-free", EU:"n/a",       UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"visa-free" },
+  "maldives":     { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "phuket":       { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "kyoto":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"n/a" },
+  "hanoi":        { US:"e-visa",    EU:"e-visa",    UK:"e-visa",    AU:"e-visa",    RU:"e-visa",    CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+  "chiang-mai":   { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-on-arrival",JP:"visa-free" },
+  "taipei":       { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"required",   IN:"visa-free",      JP:"visa-free" },
+  "kuala-lumpur": { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"visa-free", CN:"visa-free",  IN:"visa-free",      JP:"visa-free" },
+  "osaka":        { US:"visa-free", EU:"visa-free", UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"n/a" },
+  "istanbul":     { US:"e-visa",    EU:"visa-free", UK:"e-visa",    AU:"e-visa",    RU:"visa-free", CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+  "prague":       { US:"visa-free", EU:"n/a",       UK:"visa-free", AU:"visa-free", RU:"required",  CN:"required",   IN:"required",       JP:"visa-free" },
+  "ho-chi-minh":  { US:"e-visa",    EU:"e-visa",    UK:"e-visa",    AU:"e-visa",    RU:"e-visa",    CN:"e-visa",     IN:"e-visa",         JP:"visa-free" },
+};
+
+const VISA_CONFIG = {
+  "visa-free":       { label:"Visa-free",     color:"#059669", bg:"#dcfce7", border:"#86efac" },
+  "visa-on-arrival": { label:"On arrival",    color:"#ca8a04", bg:"#fef9c3", border:"#fde047" },
+  "e-visa":          { label:"e-Visa",        color:"#2563eb", bg:"#dbeafe", border:"#93c5fd" },
+  "required":        { label:"Visa required", color:"#dc2626", bg:"#fee2e2", border:"#fca5a5" },
+  "special":         { label:"Special permit",color:"#7c3aed", bg:"#ede9fe", border:"#c4b5fd" },
+  "n/a":             { label:"N/A",           color:"#a8a29e", bg:"#f3f1ed", border:"#e2ded7" },
+};
+
+function getVisa(citySlug, passportId) {
+  return VISA_DATA[citySlug]?.[passportId] ?? "required";
+}
+
+const FLIGHT_DATA = {
+  "hong-kong": [82, 88, 92, 98, 105, 110, 112, 108, 90, 95, 100, 118],
+  "da-nang":   [95, 102, 98, 105, 90, 85, 83, 80, 88, 92, 98, 110],
+};
+function getFlightIdx(citySlug, monthIdx) {
+  return FLIGHT_DATA[citySlug]?.[monthIdx] ?? null;
+}
+
+// ─── URL share ───────────────────────────────────────────────────────────────
+function encodeShare(city, weights, year, passport) {
+  const p = new URLSearchParams({
+    c: city,
+    wc: weights.wCrowd, wp: weights.wPrice, wt: weights.wTyphoon, wh: weights.wHoliday,
+    pb: weights.preferBusy ? 1 : 0,
+    y: year, pp: passport,
+  });
+  return `${location.origin}${location.pathname}?${p.toString()}`;
+}
+function decodeShare() {
+  const p = new URLSearchParams(location.search);
+  if (!p.has("c")) return null;
+  return {
+    city:     p.get("c"),
+    weights:  { wCrowd:+p.get("wc")||3, wPrice:+p.get("wp")||2, wTyphoon:+p.get("wt")||2, wHoliday:+p.get("wh")||2, preferBusy: p.get("pb")==="1" },
+    year:     +p.get("y") || new Date().getFullYear() + 1,
+    passport: p.get("pp") || "US",
+  };
+}
+
+// ─── Scoring ─────────────────────────────────────────────────────────────────
+function pricePenaltyFn(idx) {
+  if (!idx) return 0;
+  if (idx <= 70) return 0; if (idx <= 90) return 1; if (idx <= 110) return 2;
+  if (idx <= 130) return 3.5; if (idx <= 160) return 5.5; return 8;
+}
+function typhoonPenaltyFn(risk) {
+  return { none:0, low:0.5, moderate:2.0, high:6.0 }[risk] ?? 0;
+}
+function holidayPenaltyFn(holidays) {
+  if (!holidays?.length) return 0;
+  const map = { extreme:3, very_high:2, high:2, moderate:1 };
+  return Math.max(...holidays.map(h => map[h.crowdImpact] || 0));
+}
+function computeCustomScore(month, w) {
+  const { wCrowd, wPrice, wTyphoon, wHoliday, preferBusy } = w;
+  const crowdScore   = preferBusy ? month.crowds : (11 - month.crowds);
+  const priceScore   = 10 - pricePenaltyFn(month.priceIdx);
+  const typhoonScore = 10 - typhoonPenaltyFn(month.typhoon);
+  const holidayScore = 10 - holidayPenaltyFn(month.holidays);
+  const total = wCrowd + wPrice + wTyphoon + wHoliday;
+  if (total === 0) return 5.0;
+  const raw = (wCrowd*crowdScore + wPrice*priceScore + wTyphoon*typhoonScore + wHoliday*holidayScore) / total;
+  return Math.min(10, Math.max(1, Math.round(raw * 10) / 10));
+}
+
+// ─── Presets ─────────────────────────────────────────────────────────────────
+const PRESETS = [
+  { id:"balanced", label:"Balanced",     icon:"⚖️", wCrowd:3, wPrice:2, wTyphoon:2, wHoliday:2, preferBusy:false },
+  { id:"budget",   label:"Budget",       icon:"💸", wCrowd:1, wPrice:8, wTyphoon:1, wHoliday:1, preferBusy:false },
+  { id:"quiet",    label:"No crowds",    icon:"🧘", wCrowd:8, wPrice:1, wTyphoon:1, wHoliday:2, preferBusy:false },
+  { id:"festival", label:"Love the buzz",icon:"🎉", wCrowd:6, wPrice:1, wTyphoon:1, wHoliday:0, preferBusy:true  },
+  { id:"safe",     label:"Storm-free",   icon:"☀️", wCrowd:2, wPrice:1, wTyphoon:8, wHoliday:1, preferBusy:false },
+];
+const DEFAULT_WEIGHTS = PRESETS[0];
+
+// ─── Best window helper ───────────────────────────────────────────────────────
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function getBestWindow(top3Months) {
+  const nums = [...top3Months].map(m => m.m).sort((a,b) => a-b);
+  function isConsec(a,b) { return b-a===1 || (a===12&&b===1); }
+  if (nums.length===3 && isConsec(nums[0],nums[1]) && isConsec(nums[1],nums[2]))
+    return `${MONTH_NAMES[nums[0]-1]}–${MONTH_NAMES[nums[2]-1]}`;
+  if (nums[0]===1 && nums[1]===11 && nums[2]===12) return "Nov–Jan";
+  for (let i=0; i<nums.length-1; i++)
+    if (isConsec(nums[i],nums[i+1])) return `${MONTH_NAMES[nums[i]-1]}–${MONTH_NAMES[nums[i+1]-1]}`;
+  return null;
+}
+
+// ─── PassportSelector ────────────────────────────────────────────────────────
+function PassportSelector({ selected, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = PASSPORTS.find(p => p.id === selected) || PASSPORTS[0];
+
+  useEffect(() => {
+    function onOut(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onOut);
+    return () => document.removeEventListener("mousedown", onOut);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <button onClick={() => setOpen(o => !o)} title="Your passport"
+        style={{ display:"flex", alignItems:"center", gap:5, background:"none",
+          border:"1px solid var(--border)", borderRadius:"var(--r-sm)", padding:"4px 9px",
+          fontFamily:"inherit", fontSize:12, fontWeight:700, color:"var(--txt-1)",
+          cursor:"pointer", whiteSpace:"nowrap", transition:"border-color 0.15s" }}>
+        <span>{current.flag}</span>
+        <span style={{ fontSize:11, color:"var(--txt-3)" }}>{current.label}</span>
+        <span style={{ fontSize:9, color:"var(--txt-4)" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:100,
+          background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"var(--r-md)",
+          boxShadow:"var(--shadow-md)", padding:4, minWidth:110 }}>
+          {PASSPORTS.map(p => (
+            <div key={p.id} onClick={() => { onSelect(p.id); setOpen(false); }}
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px",
+                borderRadius:"var(--r-xs)", cursor:"pointer", fontSize:12, fontWeight:600,
+                background: selected===p.id ? "var(--brand-light)" : "transparent",
+                color: selected===p.id ? "var(--brand)" : "var(--txt-1)", transition:"background 0.1s" }}
+              onMouseEnter={e => { if (selected!==p.id) e.currentTarget.style.background="#f8f7f4"; }}
+              onMouseLeave={e => { if (selected!==p.id) e.currentTarget.style.background="transparent"; }}>
+              <span>{p.flag}</span><span>{p.label}</span>
+              {selected===p.id && <span style={{ marginLeft:"auto", fontSize:10, color:"var(--brand)" }}>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── VisaBadge ───────────────────────────────────────────────────────────────
+function VisaBadge({ citySlug, passport, size="sm" }) {
+  const status = getVisa(citySlug, passport);
+  const cfg = VISA_CONFIG[status] || VISA_CONFIG["required"];
+  const sm = size === "sm";
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+      fontSize: sm ? 10 : 11, fontWeight:700,
+      padding: sm ? "2px 7px" : "4px 10px", borderRadius:99,
+      background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, whiteSpace:"nowrap" }}>
+      {status==="visa-free" ? "✓" : status==="required" ? "✗" : status==="e-visa" ? "⚡" : status==="visa-on-arrival" ? "🛬" : "●"}
+      {" "}{cfg.label}
+    </span>
+  );
+}
+
+// ─── ShareButton ─────────────────────────────────────────────────────────────
+function ShareButton({ city, weights, year, passport }) {
+  const [copied, setCopied] = useState(false);
+  function share() {
+    navigator.clipboard.writeText(encodeShare(city, weights, year, passport)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+  return (
+    <button onClick={share}
+      style={{ display:"flex", alignItems:"center", gap:5,
+        background: copied ? "#f0fdf4" : "none",
+        border:`1px solid ${copied ? "#86efac" : "var(--border)"}`,
+        borderRadius:"var(--r-sm)", padding:"4px 10px",
+        fontFamily:"inherit", fontSize:12, fontWeight:600,
+        color: copied ? "#059669" : "var(--txt-3)", cursor:"pointer",
+        transition:"all 0.18s", whiteSpace:"nowrap" }}>
+      {copied ? "✓ Copied!" : "⎙ Share"}
+    </button>
+  );
+}
+
+// ─── CityDropdown ────────────────────────────────────────────────────────────
+function CityDropdown({ selected, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+  const cityData = CITIES[selected];
+
+  useEffect(() => {
+    function onClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 50); }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return Object.entries(CITIES).filter(([,d]) => d.city.toLowerCase().includes(q) || d.country.toLowerCase().includes(q));
+  }, [query]);
+
+  return (
+    <div className="city-dropdown-wrap" ref={ref}>
+      <button className="city-btn" onClick={() => { setOpen(o => !o); setQuery(""); }}>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{cityData.city}</span>
+        <span className={`city-chevron ${open ? "open" : ""}`}>▾</span>
+      </button>
+      {open && (
+        <div className="city-dropdown fade-up">
+          <input ref={inputRef} className="city-search" placeholder="Search cities…"
+            value={query} onChange={e => setQuery(e.target.value)} />
+          <div className="city-list">
+            {filtered.map(([slug,d]) => (
+              <div key={slug} className={`city-item ${selected===slug ? "active" : ""}`}
+                onClick={() => { onSelect(slug); setOpen(false); setQuery(""); }}>
+                <span>{d.city}</span>
+                <span className="city-item-country">{d.country}</span>
+              </div>
+            ))}
+            {filtered.length===0 && <div style={{ padding:"12px 10px", fontSize:12, color:"var(--txt-4)" }}>No cities found</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── YearSelector ────────────────────────────────────────────────────────────
+const CURRENT_YEAR = new Date().getFullYear();
+function YearSelector({ selected, onSelect }) {
+  const years = [CURRENT_YEAR-1, CURRENT_YEAR, CURRENT_YEAR+1, CURRENT_YEAR+2, CURRENT_YEAR+3];
+  return (
+    <>
+      {years.map(y => (
+        <button key={y} className={`year-pill ${selected===y ? "active" : "inactive"}`}
+          onClick={() => onSelect(y)}>
+          {y}
+        </button>
+      ))}
+    </>
+  );
+}
+
+// ─── SummaryBanner ───────────────────────────────────────────────────────────
+function SummaryBanner({ cityData, weights, planningYear, onSelectMonth }) {
+  const top3 = useMemo(() =>
+    [...cityData.months].sort((a,b) => computeCustomScore(b,weights)-computeCustomScore(a,weights)).slice(0,3),
+  [cityData, weights]);
+  const worst3 = useMemo(() =>
+    [...cityData.months].sort((a,b) => computeCustomScore(a,weights)-computeCustomScore(b,weights)).slice(0,3),
+  [cityData, weights]);
+  const top3Sorted = useMemo(() => [...top3].sort((a,b) => a.m-b.m), [top3]);
+  const worst3Sorted = useMemo(() => [...worst3].sort((a,b) => a.m-b.m), [worst3]);
+  const window = useMemo(() => getBestWindow(top3), [top3]);
+  const isHistorical = planningYear < CURRENT_YEAR;
+
+  return (
+    <div className="summary-banner">
+      {isHistorical && (
+        <div style={{ width:"100%", padding:"6px 10px", background:"#fefce8", border:"1px solid #fde047", borderRadius:"var(--r-xs)", fontSize:12, fontWeight:600, color:"#854d0e" }}>
+          📊 Showing historical data for {planningYear}
+        </div>
+      )}
+      <div className="summary-best">
+        <span className="summary-label">Best</span>
+        {window && <span className="summary-window">✦ {window}</span>}
+        <div style={{ display:"flex", gap:4 }}>
+          {top3Sorted.map(m => {
+            const sc = computeCustomScore(m, weights);
+            const v = verdict(sc, m.typhoon);
+            return (
+              <button key={m.m} className="summary-month-btn"
+                style={{ borderColor:v.border, background:v.bg }}
+                onClick={() => onSelectMonth(m.m)}>
+                <span style={{ fontSize:12, fontWeight:800, color:v.text }}>{m.name}</span>
+                <span style={{ fontSize:10, fontWeight:700, color:v.badge }}>{sc.toFixed(1)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="summary-skip">
+        <span className="summary-label">Skip</span>
+        {worst3Sorted.map(m => (
+          <button key={m.m} className="summary-skip-btn" onClick={() => onSelectMonth(m.m)}>
+            {m.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── PersonalizePanel ────────────────────────────────────────────────────────
+function PersonalizePanel({ weights, onChange }) {
+  const [open, setOpen] = useState(false);
+  const activePreset = PRESETS.find(p =>
+    p.wCrowd===weights.wCrowd && p.wPrice===weights.wPrice &&
+    p.wTyphoon===weights.wTyphoon && p.wHoliday===weights.wHoliday &&
+    p.preferBusy===weights.preferBusy
+  )?.id;
+
+  function applyPreset(p) {
+    onChange({ wCrowd:p.wCrowd, wPrice:p.wPrice, wTyphoon:p.wTyphoon, wHoliday:p.wHoliday, preferBusy:p.preferBusy });
+  }
+  function set(key, val) { onChange({ ...weights, [key]:val }); }
+
+  const sliders = [
+    { key:"wCrowd",   label: weights.preferBusy ? "Lively vibe" : "Avoid crowds", color:"#7c3aed" },
+    { key:"wPrice",   label:"Cheapest time",  color:"#059669" },
+    { key:"wTyphoon", label:"Storm-free",     color:"#0d9488" },
+    { key:"wHoliday", label:"Skip holidays",  color:"#ea580c" },
+  ];
+
+  return (
+    <div style={{ marginBottom:12 }}>
+      <div className="preset-row">
+        <span className="preset-label">Priorities</span>
+        {PRESETS.map(p => (
+          <button key={p.id}
+            className={`preset-btn ${activePreset===p.id ? "active" : "inactive"}`}
+            onClick={() => { applyPreset(p); setOpen(activePreset!==p.id || !open ? true : !open); }}>
+            <span>{p.icon}</span>{p.label}
+          </button>
+        ))}
+        <button className="customize-toggle" onClick={() => setOpen(o => !o)}>
+          {open ? "Hide ▲" : "Customize ▼"}
+        </button>
+      </div>
+
+      {open && (
+        <div className="slider-grid fade-up">
+          {sliders.map(s => (
+            <div key={s.key}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                <span style={{ fontSize:11, fontWeight:600, color:"var(--txt-2)" }}>{s.label}</span>
+                <span style={{ fontSize:11, fontWeight:700, color: weights[s.key]===0 ? "var(--txt-5)" : s.color }}>
+                  {weights[s.key]===0 ? "off" : ["","low","","medium","","","high","","","","max"][weights[s.key]] || weights[s.key]}
+                </span>
+              </div>
+              <input type="range" min={0} max={10} step={1} value={weights[s.key]}
+                onChange={e => set(s.key, +e.target.value)}
+                style={{ width:"100%", accentColor:s.color, cursor:"pointer" }} />
+            </div>
+          ))}
+          <div style={{ gridColumn:"1/-1", display:"flex", alignItems:"center", gap:10, paddingTop:10, borderTop:"1px solid var(--border-light)" }}>
+            <div>
+              <span style={{ fontSize:11, fontWeight:600, color:"var(--txt-2)" }}>Crowd preference</span>
+              <div style={{ fontSize:10, color:"var(--txt-4)", marginTop:1 }}>How the crowds slider is counted</div>
+            </div>
+            {[{val:false,label:"🧘 Quiet"},{val:true,label:"🎉 Lively"}].map(opt => (
+              <button key={String(opt.val)} onClick={() => set("preferBusy", opt.val)}
+                style={{ fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:"var(--r-sm)",
+                  cursor:"pointer", fontFamily:"inherit", border:"1px solid transparent", transition:"all 0.12s",
+                  background: weights.preferBusy===opt.val ? "var(--txt-1)" : "var(--border-light)",
+                  color:       weights.preferBusy===opt.val ? "#fff" : "var(--txt-2)",
+                }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MonthRow ────────────────────────────────────────────────────────────────
+function MonthRow({ month, isSelected, onSelect, tempUnit, customScore, weights }) {
+  const score = customScore ?? month.overall;
+  const v = verdict(score, month.typhoon);
+  const cCol = crowdColor(month.crowds);
+  const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
+  const priceCol = priceDelta===null ? "var(--txt-4)" : priceDelta>10 ? "#dc2626" : priceDelta<-5 ? "#059669" : "var(--txt-3)";
+  const priceStr = priceDelta===null ? "—" : priceDelta===0 ? "avg" : priceDelta>0 ? `+${priceDelta}%` : `${priceDelta}%`;
+  const topHoliday = month.holidays?.length
+    ? month.holidays.reduce((a,b) => (IMPACT_RANK[b.crowdImpact]||0)>(IMPACT_RANK[a.crowdImpact]||0)?b:a)
+    : null;
+
+  return (
+    <tr className={`month-row ${isSelected ? "month-row-selected" : ""}`} onClick={() => onSelect(month.m)}>
+      <td style={{ borderLeftColor: isSelected ? v.badge : undefined, background: isSelected ? v.bg : undefined }}>
+        <span className="mr-name" style={{ color: isSelected ? v.text : undefined }}>{month.name}</span>
+      </td>
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
+          width:36, height:22, borderRadius:"var(--r-xs)",
+          background:v.bg, border:`1px solid ${v.border}`,
+          fontSize:12, fontWeight:800, color:v.badge }}>{score.toFixed(1)}</span>
+      </td>
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <span className="mr-temp">{fmtTemp(month.high, tempUnit)}/{fmtTemp(month.low, tempUnit)}</span>
+      </td>
+      <td className="col-hide-sm" style={{ background: isSelected ? v.bg : undefined }}>
+        <span className="mr-rain" style={{ color: month.rainDays>=16?"#dc2626":month.rainDays>=10?"#ea580c":"var(--txt-4)", fontWeight: month.rainDays>=10?700:400 }}>{month.rainDays}d</span>
+      </td>
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <span className="mr-crowd" style={{ color:cCol }}>{crowdLabel(month.crowds)}</span>
+      </td>
+      <td className="col-hide-sm" style={{ background: isSelected ? v.bg : undefined }}>
+        <span style={{ fontSize:11, fontWeight:600, color:priceCol }}>{priceStr}</span>
+      </td>
+      <td style={{ background: isSelected ? v.bg : undefined }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:4 }}>
+          {month.typhoon!=="none" && (
+            <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:99,
+              background: month.typhoon==="high"?"#fee2e2":"#ffedd5",
+              color: month.typhoon==="high"?"#dc2626":"#ea580c", whiteSpace:"nowrap" }}>
+              {month.typhoon==="high"?"typhoon":"storms"}
+            </span>
+          )}
+          {topHoliday && (
+            <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:99,
+              background:IMPACT_BG[topHoliday.crowdImpact], color:IMPACT_COLORS[topHoliday.crowdImpact], whiteSpace:"nowrap" }}>
+              {IMPACT_LABEL[topHoliday.crowdImpact]} holiday
+            </span>
+          )}
+          {isSelected && <span style={{ fontSize:9, color:v.badge }}>▲</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ─── BarRow ──────────────────────────────────────────────────────────────────
+function BarRow({ label, value, valueColor, fill, fillColor, ends, tip }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="bar-row">
+      <div className="bar-label-row">
+        <span className="bar-label" style={{ display:"flex", alignItems:"center", gap:5 }}>
+          {label}
+          <span style={{ position:"relative", display:"inline-block" }}>
+            <button onClick={() => setShow(s => !s)}
+              style={{ width:14, height:14, borderRadius:"50%", background:"var(--border)", border:"none",
+                cursor:"pointer", fontSize:9, fontWeight:700, color:"var(--txt-3)",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontFamily:"inherit", padding:0, lineHeight:1 }}>?</button>
+            {show && (
+              <div onClick={e => e.stopPropagation()}
+                style={{ position:"absolute", left:0, top:18, zIndex:50,
+                  background:"var(--txt-1)", color:"#f3f1ed", borderRadius:"var(--r-md)",
+                  padding:"10px 12px", width:220, fontSize:11, lineHeight:1.65,
+                  boxShadow:"var(--shadow-lg)", whiteSpace:"normal" }}>
+                {tip}
+                <button onClick={() => setShow(false)}
+                  style={{ marginTop:6, display:"block", background:"none", border:"none",
+                    color:"var(--txt-4)", cursor:"pointer", fontSize:10, fontFamily:"inherit", padding:0 }}>
+                  Close
+                </button>
+              </div>
+            )}
+          </span>
+        </span>
+        <span className="bar-value" style={{ color:valueColor }}>{value}</span>
+      </div>
+      <div className="bar-track"><div className="bar-fill" style={{ width:`${fill}%`, background:fillColor }} /></div>
+      {ends && <div className="bar-ends"><span>{ends[0]}</span><span>{ends[1]}</span></div>}
+    </div>
+  );
+}
+
+// ─── DetailPanel ─────────────────────────────────────────────────────────────
+function DetailPanel({ month, cityData, citySlug, passport, setPassport, planningYear, onYearChange, tempUnit, onClose }) {
+  const v = verdict(month.overall, month.typhoon);
+  const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
+  const priceLabel = priceDelta===null ? "No data" : priceDelta===0 ? "Average" : priceDelta>0 ? `+${priceDelta}% vs avg` : `${priceDelta}% vs avg`;
+  const priceCol = priceDelta===null ? "var(--txt-4)" : priceDelta>10 ? "#dc2626" : priceDelta<-5 ? "#059669" : "var(--txt-3)";
+  const cCol = crowdColor(month.crowds);
+
+  const quickTake = useMemo(() => {
+    const parts = [];
+    if (v.tier===5) parts.push(`${month.name} is as good as it gets.`);
+    else if (v.tier===4) parts.push(`${month.name} is a solid choice.`);
+    else if (v.tier===3) parts.push(`${month.name} is decent with some trade-offs.`);
+    else if (v.tier===2) parts.push(`${month.name} has real drawbacks to consider.`);
+    else parts.push(`${month.name} is best skipped if you can.`);
+    if (month.rainDays<=6) parts.push("Expect mostly sunny days.");
+    else if (month.rainDays>=16) parts.push(`${month.rainDays} rainy days — pack an umbrella.`);
+    if (month.crowds<=3) parts.push("You'll have it largely to yourself.");
+    else if (month.crowds>=9) parts.push("Expect big crowds — book well ahead.");
+    if (month.typhoon==="high") parts.push("Typhoon risk is real — travel insurance is essential.");
+    else if (month.typhoon==="moderate") parts.push("Storm season — check forecasts before you go.");
+    if (month.holidays?.length>0) parts.push("Major holidays affect prices and crowds.");
+    return parts.join(" ");
+  }, [month, v]);
+
+  return (
+    <div className="detail-panel fade-up">
+      {/* Header */}
+      <div className="detail-header" style={{ background:v.bg, borderBottomColor:v.border }}>
+        <div className="detail-header-left">
+          <span className="detail-emoji">{weatherEmoji(month)}</span>
+          <div>
+            <div className="detail-month-name" style={{ color:v.text }}>{month.name} {planningYear}</div>
+            <div className="detail-badges">
+              <span className="detail-verdict-badge" style={{ background:v.badge }}>{v.label} {v.emoji}</span>
+              {v.warning && <span className="detail-warning" style={{ color:v.text }}>{v.warning}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="detail-score-block">
+          <div className="detail-score-num" style={{ color:v.text }}>{month.overall.toFixed(1)}</div>
+          <div className="detail-score-label" style={{ color:v.text }}>out of 10</div>
+        </div>
+        <button className="close-btn" onClick={onClose}>✕</button>
+      </div>
+
+      {/* Two-column body */}
+      <div className="detail-body">
+        {/* Weather */}
+        <div className="detail-col">
+          <div className="col-title">Weather</div>
+          {month.typhoon!=="none" && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, borderRadius:"var(--r-xs)",
+              padding:"8px 12px", marginBottom:10,
+              background: month.typhoon==="high"?"#fee2e2":"#ffedd5" }}>
+              <span style={{ fontSize:16 }}>{month.typhoon==="high"?"🌀":"⛈"}</span>
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color: month.typhoon==="high"?"#dc2626":"#ea580c" }}>
+                  {month.typhoon==="high"?"High typhoon risk":"Storm season"}
+                </div>
+                <div style={{ fontSize:10, color:"var(--txt-3)", marginTop:1 }}>
+                  {month.typhoon==="high"?"Travel insurance essential. Check forecasts daily.":"Possible disruptions — monitor forecasts before flying."}
+                </div>
+              </div>
+            </div>
+          )}
+          <div style={{ display:"flex", alignItems:"baseline", gap:6, marginBottom:10 }}>
+            <span style={{ fontSize:28, fontWeight:800, letterSpacing:"-1px", color:"var(--txt-1)" }}>{fmtTemp(month.high, tempUnit)}</span>
+            <span style={{ fontSize:14, color:"var(--txt-4)", fontWeight:500 }}>/ {fmtTemp(month.low, tempUnit)}</span>
+            <span style={{ fontSize:11, color:"var(--txt-4)", marginLeft:4 }}>feels {fmtTemp(month.feels, tempUnit)}</span>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+              <span style={{ fontSize:11, color:"var(--txt-3)", fontWeight:600 }}>Rain days</span>
+              <span style={{ fontSize:12, fontWeight:700, color: month.rainDays>=16?"#dc2626":month.rainDays>=10?"#ea580c":"var(--txt-1)" }}>
+                {month.rainDays} / 31
+              </span>
+            </div>
+            <div style={{ height:5, background:"var(--border-light)", borderRadius:99, overflow:"hidden" }}>
+              <div style={{ height:"100%", borderRadius:99,
+                width:`${(month.rainDays/31)*100}%`,
+                background: month.rainDays>=16?"#dc2626":month.rainDays>=10?"#ea580c":"var(--brand)" }} />
+            </div>
+            <div style={{ fontSize:10, color:"var(--txt-4)", marginTop:3 }}>{month.rainfall}mm total</div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 0", borderTop:"1px solid var(--border-light)" }}>
+            <span style={{ fontSize:11, color:"var(--txt-3)" }}>Humidity</span>
+            <span style={{ fontSize:12, fontWeight:700, color: month.humidity>=80?"#ea580c":month.humidity>=70?"#ca8a04":"#059669" }}>
+              {month.humidity}%
+            </span>
+          </div>
+        </div>
+
+        {/* Crowds & Cost */}
+        <div className="detail-col">
+          <div className="col-title">Crowds & Cost</div>
+          <BarRow label="Crowd level" value={crowdLabel(month.crowds)} valueColor={cCol}
+            fill={month.crowds*10} fillColor={cCol} ends={["Empty","Packed"]}
+            tip="How busy the destination is this month. Based on flight search volumes, hotel occupancy data, and local holiday calendar." />
+          {priceDelta!==null && (
+            <BarRow label="Hotel prices" value={priceLabel} valueColor={priceCol}
+              fill={Math.min(100,month.priceIdx)} fillColor={priceDelta>10?"#dc2626":priceDelta<-5?"#059669":"#ca8a04"}
+              ends={["Cheap","Pricey"]}
+              tip="Average hotel price index vs the annual baseline (100 = average). Peaks during holidays and peak season." />
+          )}
+          {(() => {
+            const fi = getFlightIdx(citySlug, month.m-1);
+            if (fi!==null) {
+              const fd = Math.round(fi-100);
+              const fStr = fd===0?"avg":fd>0?`+${fd}% vs avg`:`${fd}% vs avg`;
+              const fCol = fd>10?"#dc2626":fd<-5?"#059669":"var(--txt-3)";
+              return (
+                <BarRow label="Flight prices" value={fStr} valueColor={fCol}
+                  fill={Math.min(100,fi)} fillColor={fd>10?"#dc2626":fd<-5?"#059669":"#ca8a04"}
+                  ends={["Cheap","Pricey"]}
+                  tip="Estimated average flight price index vs the annual baseline. Book 6–10 weeks ahead for best fares." />
+              );
+            }
+            return (
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+                background:"#f8f7f5", borderRadius:"var(--r-xs)", marginBottom:14 }}>
+                <span style={{ fontSize:14 }}>🔒</span>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"var(--txt-1)" }}>Flight prices</div>
+                  <div style={{ fontSize:10, color:"var(--txt-4)" }}>Premium feature — coming soon</div>
+                </div>
+              </div>
+            );
+          })()}
+          <div style={{ paddingTop:12, borderTop:"1px solid var(--border-light)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <span className="col-title" style={{ margin:0 }}>Visa</span>
+              <PassportSelector selected={passport} onSelect={setPassport} />
+            </div>
+            <VisaBadge citySlug={citySlug} passport={passport} size="md" />
+            {getVisa(citySlug,passport)==="required" && <div style={{ fontSize:10, color:"var(--txt-4)", marginTop:6 }}>Check your country's embassy for requirements.</div>}
+            {getVisa(citySlug,passport)==="e-visa"   && <div style={{ fontSize:10, color:"var(--txt-4)", marginTop:6 }}>Apply online before travel. Usually processed in 1–3 days.</div>}
+            {getVisa(citySlug,passport)==="visa-on-arrival" && <div style={{ fontSize:10, color:"var(--txt-4)", marginTop:6 }}>Available at the airport. Have cash & onward ticket ready.</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Events + Quick take */}
+      <div className="detail-events">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
+          <div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+              <span className="col-title" style={{ margin:0 }}>Events</span>
+              <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
+                {[CURRENT_YEAR-1, CURRENT_YEAR, CURRENT_YEAR+1, CURRENT_YEAR+2, CURRENT_YEAR+3].map(y => (
+                  <button key={y} onClick={() => onYearChange(y)}
+                    style={{ padding:"2px 7px", borderRadius:"var(--r-xs)", fontSize:11, fontWeight:600,
+                      border:"1px solid", cursor:"pointer", fontFamily:"inherit", transition:"all 0.12s",
+                      background: planningYear===y ? "var(--brand)" : "transparent",
+                      color:      planningYear===y ? "#fff" : "var(--txt-4)",
+                      borderColor:planningYear===y ? "var(--brand)" : "var(--border)" }}>
+                    {y}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {month.holidays?.length===0 && cityData && !cityData.months.some(m => m.holidays?.length>0) ? (
+              <div style={{ padding:"10px 12px", background:"#f8f7f5", border:"1px solid var(--border)", borderRadius:"var(--r-sm)" }}>
+                <span style={{ fontSize:12, color:"var(--txt-4)" }}>📋 Holiday data coming soon for this city</span>
+              </div>
+            ) : month.holidays?.length===0 ? (
+              <div className="no-holiday" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0" }}>
+                <span style={{ fontSize:13, color:"#166534" }}>✓ No major events — smooth travel</span>
+              </div>
+            ) : month.holidays?.map((h,i) => {
+              const impactColor = IMPACT_COLORS[h.crowdImpact] || "var(--txt-3)";
+              return (
+                <div key={i} className="holiday-item" style={{ background:"#fffbeb", borderColor:"#fcd34d" }}>
+                  <span className="holiday-icon">📅</span>
+                  <div className="holiday-body">
+                    <div className="holiday-name">{h.name}</div>
+                    <div className="holiday-dates">{fmtDateRange(h.dateStart, h.dateEnd, h.days)}</div>
+                    <div className="holiday-impact">
+                      <span style={{ color:impactColor, fontWeight:700 }}>{h.crowdImpact.replace("_"," ")} crowds</span>
+                      {h.priceImpact!=="none" && <span style={{ color:"var(--txt-3)" }}> · {h.priceImpact} prices</span>}
+                      {h.closureImpact!=="none" && <span style={{ color:"var(--txt-3)" }}> · {h.closureImpact} closures</span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div>
+            <div className="col-title">Quick take</div>
+            <p className="quick-take">{quickTake}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── HeatmapView ─────────────────────────────────────────────────────────────
+const DEFAULT_HEATMAP_CITIES = ["hong-kong","tokyo","bali","bangkok","da-nang","lisbon","barcelona","kyoto","singapore","seoul"];
+
+function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempUnit }) {
+  const [visibleCities, setVisibleCities] = useState(() => {
+    const set = new Set(DEFAULT_HEATMAP_CITIES);
+    set.add(selectedCity);
+    return [...set];
+  });
+  const [hovered, setHovered] = useState(null);
+  const [focusedCell, setFocusedCell] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const pickerRef = useRef(null);
+  const pickerInputRef = useRef(null);
+
+  useEffect(() => { if (pickerOpen) setTimeout(() => pickerInputRef.current?.focus(), 40); }, [pickerOpen]);
+  useEffect(() => {
+    function onClickOut(e) { if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(false); }
+    document.addEventListener("mousedown", onClickOut);
+    return () => document.removeEventListener("mousedown", onClickOut);
+  }, []);
+  useEffect(() => {
+    setVisibleCities(prev => prev.includes(selectedCity) ? prev : [selectedCity, ...prev]);
+  }, [selectedCity]);
+
+  const orderedCities = useMemo(() => {
+    const rest = visibleCities.filter(s => s!==selectedCity);
+    return [selectedCity, ...rest];
+  }, [visibleCities, selectedCity]);
+
+  function removeCity(slug) {
+    if (slug===selectedCity) return;
+    setVisibleCities(prev => prev.filter(s => s!==slug));
+    if (focusedCell?.slug===slug) setFocusedCell(null);
+  }
+  function addCity(slug) {
+    setVisibleCities(prev => prev.includes(slug) ? prev : [...prev, slug]);
+    setPickerOpen(false); setPickerQuery("");
+  }
+
+  const pickerFiltered = useMemo(() => {
+    const q = pickerQuery.toLowerCase();
+    return Object.entries(CITIES).filter(([slug,d]) =>
+      !visibleCities.includes(slug) &&
+      (d.city.toLowerCase().includes(q) || d.country.toLowerCase().includes(q))
+    );
+  }, [pickerQuery, visibleCities]);
+
+  const CELL_H = 46;
+  const LABEL_W = 136;
+
+  function scoreToOpacity(score) { return 0.15 + (score/10) * 0.85; }
+
+  return (
+    <div>
+      {/* City picker row */}
+      <div className="heatmap-compare-row">
+        <span className="summary-label">Compare</span>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:4, alignItems:"center" }}>
+          {orderedCities.map(slug => {
+            const d = CITIES[slug]; if (!d) return null;
+            const isCurrent = slug===selectedCity;
+            return (
+              <div key={slug} className="heatmap-city-tag"
+                style={{ background: isCurrent ? "var(--brand)" : "var(--txt-1)" }}>
+                <span>{d.city}</span>
+                {!isCurrent && (
+                  <button className="heatmap-city-remove" onClick={() => removeCity(slug)}>×</button>
+                )}
+              </div>
+            );
+          })}
+          <div style={{ position:"relative" }} ref={pickerRef}>
+            <button className="heatmap-add-btn" onClick={() => setPickerOpen(o => !o)}>
+              ＋ Add
+            </button>
+            {pickerOpen && (
+              <div style={{ position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:100,
+                background:"var(--surface)", border:"1px solid var(--border)",
+                borderRadius:"var(--r-md)", boxShadow:"var(--shadow-lg)", width:220, overflow:"hidden" }}>
+                <input ref={pickerInputRef} value={pickerQuery} onChange={e => setPickerQuery(e.target.value)}
+                  placeholder="Search cities…"
+                  style={{ width:"100%", border:"none", borderBottom:"1px solid var(--border-light)",
+                    padding:"9px 14px", fontSize:12, fontFamily:"inherit", outline:"none",
+                    background:"#fafaf8", color:"var(--txt-1)" }} />
+                <div style={{ maxHeight:220, overflowY:"auto", padding:4 }}>
+                  {pickerFiltered.length===0
+                    ? <div style={{ padding:"10px 12px", fontSize:12, color:"var(--txt-4)" }}>No more cities</div>
+                    : pickerFiltered.map(([slug,d]) => (
+                      <div key={slug} onClick={() => addCity(slug)}
+                        style={{ padding:"7px 10px", borderRadius:"var(--r-xs)", cursor:"pointer",
+                          fontSize:12, fontWeight:500, color:"var(--txt-1)",
+                          display:"flex", justifyContent:"space-between", alignItems:"center", transition:"background 0.1s" }}
+                        onMouseEnter={e => e.currentTarget.style.background="var(--brand-light)"}
+                        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                        <span>{d.city}</span>
+                        <span style={{ fontSize:10, color:"var(--txt-4)" }}>{d.country.split(" ").pop()}</span>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div style={{ overflowX:"auto" }}>
+        <div style={{ minWidth: LABEL_W + 12*52 }}>
+          {/* Month header */}
+          <div style={{ display:"flex", marginBottom:4, paddingLeft:LABEL_W }}>
+            {MONTH_NAMES.map((mo,i) => (
+              <div key={i} style={{ flex:1, textAlign:"center", fontSize:10, fontWeight:700,
+                color:"var(--txt-5)", letterSpacing:"0.04em", minWidth:42 }}>{mo}</div>
+            ))}
+          </div>
+          {/* City rows */}
+          {orderedCities.map(slug => {
+            const d = CITIES[slug]; if (!d) return null;
+            const isCurrent = slug===selectedCity;
+            return (
+              <div key={slug} style={{ display:"flex", alignItems:"center", marginBottom:3 }}>
+                <div style={{ width:LABEL_W, flexShrink:0, paddingRight:10, display:"flex", alignItems:"center", gap:6 }}>
+                  <button onClick={() => onSelectCity(slug)}
+                    style={{ background:"none", border:"none", cursor:"pointer", textAlign:"left",
+                      padding:"2px 0", fontFamily:"inherit", flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight: isCurrent?800:600,
+                      color: isCurrent?"var(--brand)":"var(--txt-1)",
+                      whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {d.city}
+                    </div>
+                    <div style={{ fontSize:9, color:"var(--txt-5)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {d.country}
+                    </div>
+                  </button>
+                  {isCurrent && <div style={{ width:3, height:22, borderRadius:99, background:"var(--brand)", flexShrink:0 }} />}
+                </div>
+                {d.months.map(m => {
+                  const score = computeCustomScore(m, weights);
+                  const v = verdict(score, m.typhoon);
+                  const isHov = hovered?.slug===slug && hovered?.month===m.m;
+                  const isFocused = focusedCell?.slug===slug && focusedCell?.month===m.m;
+                  return (
+                    <div key={m.m} style={{ flex:1, minWidth:42, height:CELL_H, margin:"0 1.5px",
+                      borderRadius:"var(--r-xs)", position:"relative", overflow:"hidden", cursor:"pointer",
+                      background: v.bg,
+                      border: isFocused ? `2px solid ${v.badge}` : isHov ? `2px solid ${v.badge}88` : "2px solid transparent",
+                      transition:"border-color 0.1s, transform 0.1s",
+                      transform: isHov ? "scaleY(1.05)" : "scaleY(1)" }}
+                      onClick={() => setFocusedCell(fc => fc?.slug===slug && fc?.month===m.m ? null : {slug,month:m.m})}
+                      onMouseEnter={() => setHovered({slug,month:m.m})}
+                      onMouseLeave={() => setHovered(null)}>
+                      <div style={{ position:"absolute", inset:0,
+                        background:v.badge, opacity:scoreToOpacity(score), borderRadius:4 }} />
+                      <div style={{ position:"absolute", inset:0, display:"flex",
+                        alignItems:"center", justifyContent:"center",
+                        fontSize:11, fontWeight:800, letterSpacing:"-0.3px", pointerEvents:"none",
+                        color: score>=6 ? "#fff" : v.text,
+                        textShadow: score>=6 ? "0 1px 2px rgba(0,0,0,0.2)" : "none" }}>
+                        {score.toFixed(1)}
+                      </div>
+                      {m.holidays?.length>0 && (
+                        <div style={{ position:"absolute", top:3, right:4, width:4, height:4,
+                          borderRadius:"50%", background:"#fff", opacity:0.9 }} />
+                      )}
+                      {m.typhoon!=="none" && (
+                        <div style={{ position:"absolute", bottom:2, right:3, fontSize:8, lineHeight:1, opacity:0.85 }}>
+                          {m.typhoon==="high"?"🌀":"⛈"}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Hover tooltip */}
+      {(() => {
+        const d = hovered ? CITIES[hovered.slug] : null;
+        const m = d ? d.months[hovered.month-1] : null;
+        const score = m ? computeCustomScore(m, weights) : 0;
+        const v = m ? verdict(score, m.typhoon) : null;
+        return (
+          <div style={{ marginTop:10, height:38, borderRadius:"var(--r-sm)", overflow:"hidden",
+            background: hovered ? "var(--txt-1)" : "transparent",
+            transition:"background 0.15s", display:"flex", alignItems:"center",
+            padding: hovered ? "0 16px" : "0", gap:14, flexWrap:"nowrap" }}>
+            {hovered && d && m && v && <>
+              <span style={{ fontWeight:800, fontSize:13, color:"#f3f1ed", whiteSpace:"nowrap" }}>{d.city}</span>
+              <span style={{ color:"#444" }}>·</span>
+              <span style={{ fontWeight:700, fontSize:13, color:"#f3f1ed", whiteSpace:"nowrap" }}>{m.name}</span>
+              <span style={{ color:v.badge, fontWeight:700, fontSize:12, whiteSpace:"nowrap" }}>{v.label} {score.toFixed(1)}/10</span>
+              <span style={{ color:"var(--txt-4)", fontSize:12, whiteSpace:"nowrap" }}>{fmtTemp(m.high,tempUnit)}/{fmtTemp(m.low,tempUnit)}</span>
+              <span style={{ color: m.rainDays>=16?"#f87171":"#6b7280", fontSize:12, whiteSpace:"nowrap" }}>{m.rainDays}d rain</span>
+              <span style={{ color:crowdColor(m.crowds), fontSize:12, whiteSpace:"nowrap" }}>{crowdLabel(m.crowds)}</span>
+              {m.holidays?.length>0 && <span style={{ color:"#fbbf24", fontSize:12, whiteSpace:"nowrap" }}>📅 {m.holidays[0].name}</span>}
+              {m.typhoon!=="none" && <span style={{ color:"#fb923c", fontSize:12, whiteSpace:"nowrap" }}>{m.typhoon==="high"?"🌀 Typhoon":"⛈ Storms"}</span>}
+              <span style={{ color:"#444", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>click to expand →</span>
+            </>}
+          </div>
+        );
+      })()}
+
+      {/* Focused cell expand */}
+      {focusedCell && (() => {
+        const fd = CITIES[focusedCell.slug]; if (!fd) return null;
+        const fm = fd.months[focusedCell.month-1];
+        const fscore = computeCustomScore(fm, weights);
+        const fv = verdict(fscore, fm.typhoon);
+        const pd = fm.priceIdx ? Math.round(fm.priceIdx-100) : null;
+        const pStr = pd===null?"—":pd===0?"avg":pd>0?`+${pd}%`:`${pd}%`;
+        const pCol = pd===null?"var(--txt-4)":pd>10?"#dc2626":pd<-5?"#059669":"var(--txt-3)";
+        return (
+          <div style={{ marginTop:8, background:fv.bg, border:`1.5px solid ${fv.border}`, borderRadius:"var(--r-md)",
+            padding:"14px 18px", display:"flex", alignItems:"center", gap:18, flexWrap:"wrap",
+            animation:"fadeUp 0.15s ease-out" }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:800, color:fv.text }}>{fd.city} · {fm.name}</div>
+              <div style={{ fontSize:11, color:fv.badge, fontWeight:700, marginTop:2 }}>{fv.label} {fv.emoji} {fscore.toFixed(1)}/10</div>
+            </div>
+            <div style={{ width:1, height:32, background:fv.border }} />
+            <div style={{ fontSize:12, color:"var(--txt-2)" }}>
+              <span style={{ fontWeight:700, color:"var(--txt-1)" }}>{fmtTemp(fm.high, tempUnit)}</span>
+              <span style={{ color:"var(--txt-4)" }}>/{fmtTemp(fm.low, tempUnit)}</span>
+              <span style={{ color:"var(--txt-4)", marginLeft:6 }}>{fm.rainDays}d rain</span>
+            </div>
+            <div style={{ fontSize:12, fontWeight:700, color:crowdColor(fm.crowds) }}>{crowdLabel(fm.crowds)}</div>
+            {pd!==null && <div style={{ fontSize:12, fontWeight:700, color:pCol }}>Hotels {pStr}</div>}
+            {fm.holidays?.length>0 && <div style={{ fontSize:12, color:"#92400e" }}>📅 {fm.holidays[0].name}</div>}
+            {fm.typhoon!=="none" && <div style={{ fontSize:12, color:fm.typhoon==="high"?"#dc2626":"#ea580c" }}>{fm.typhoon==="high"?"🌀 Typhoon risk":"⛈ Storm season"}</div>}
+            <button onClick={() => { onSelectCity(focusedCell.slug); onSelectMonth(focusedCell.month); setFocusedCell(null); }}
+              style={{ marginLeft:"auto", fontSize:11, fontWeight:700, padding:"5px 14px",
+                borderRadius:"var(--r-sm)", background:fv.badge, color:"#fff",
+                border:"none", cursor:"pointer", fontFamily:"inherit" }}>
+              Open detail →
+            </button>
+            <button onClick={() => setFocusedCell(null)}
+              style={{ background:"none", border:"none", cursor:"pointer", color:fv.text,
+                fontSize:14, fontFamily:"inherit", padding:"2px 4px", opacity:0.5 }}>✕</button>
+          </div>
+        );
+      })()}
+
+      {/* Legend */}
+      <div style={{ display:"flex", gap:14, marginTop:12, alignItems:"center", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:3, alignItems:"center" }}>
+          {[1,2,3,4,5,6,7,8,9,10].map(s => {
+            const tier = s>=8.5?5:s>=7?4:s>=5.5?3:s>=4?2:1;
+            return <div key={s} style={{ width:16, height:10, borderRadius:2,
+              background:TIERS[tier].badge, opacity:0.15+(s/10)*0.85 }} />;
+          })}
+        </div>
+        <span style={{ fontSize:10, color:"var(--txt-4)" }}>1 → 10</span>
+        <div style={{ width:1, height:10, background:"var(--border)" }} />
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <div style={{ width:5, height:5, borderRadius:"50%", background:"var(--txt-3)", opacity:0.6 }} />
+          <span style={{ fontSize:10, color:"var(--txt-4)" }}>Holiday</span>
+        </div>
+        <span style={{ fontSize:10 }}>🌀 <span style={{ color:"var(--txt-4)" }}>Storm</span></span>
+      </div>
+    </div>
+  );
+}
+
+// ─── TimelineView ─────────────────────────────────────────────────────────────
+function TimelineView({ months, selectedMonth, onSelectMonth, tempUnit, weights }) {
+  const [hovered, setHovered] = useState(null);
+  const scores = useMemo(() => months.map(m => computeCustomScore(m, weights)), [months, weights]);
+  const top3 = useMemo(() =>
+    [...months].map((m,i) => ({ ...m, score:scores[i] }))
+      .sort((a,b) => b.score-a.score).slice(0,3).map(m => m.m).sort((a,b) => a-b),
+  [months, scores]);
+
+  const windowSpan = useMemo(() => {
+    function isConsec(a,b) { return b-a===1||(a===12&&b===1); }
+    if (top3.length<2) return null;
+    if (top3.length===3 && isConsec(top3[0],top3[1]) && isConsec(top3[1],top3[2]))
+      return { start:top3[0]-1, end:top3[2]-1 };
+    if (top3[0]===1&&top3[1]===11&&top3[2]===12) return { start:10, end:12, wrap:true };
+    if (isConsec(top3[0],top3[1])) return { start:top3[0]-1, end:top3[1]-1 };
+    if (isConsec(top3[1],top3[2])) return { start:top3[1]-1, end:top3[2]-1 };
+    return null;
+  }, [top3]);
+
+  const lanes = [
+    { key:"score",  label:"Score",  height:60 },
+    { key:"rain",   label:"Rain",   height:32 },
+    { key:"crowd",  label:"Crowds", height:32 },
+    { key:"price",  label:"Prices", height:32 },
+    { key:"events", label:"Events", height:32 },
+  ];
+
+  function getLaneFill(m, score, key) {
+    switch(key) {
+      case "score":  return { pct:(score/10)*100, color:TIERS[verdict(score,m.typhoon).tier].badge };
+      case "rain":   return { pct:(m.rainDays/31)*100, color:m.rainDays>=16?"#dc2626":m.rainDays>=10?"#ea580c":"#60a5fa" };
+      case "crowd":  return { pct:(m.crowds/10)*100, color:crowdColor(m.crowds) };
+      case "price":  return { pct:Math.min(100,m.priceIdx), color:m.priceIdx>110?"#dc2626":m.priceIdx<90?"#059669":"#ca8a04" };
+      default: return null;
+    }
+  }
+  function getLaneValue(m, score, key) {
+    switch(key) {
+      case "score": return score.toFixed(1);
+      case "rain":  return `${m.rainDays}d`;
+      case "crowd": return crowdLabel(m.crowds).split(" ")[0];
+      case "price": { const d=Math.round(m.priceIdx-100); return d===0?"avg":d>0?`+${d}%`:`${d}%`; }
+      default: return null;
+    }
+  }
+
+  const LABEL_W = 52;
+
+  return (
+    <div style={{ marginTop:4 }}>
+      {windowSpan && (() => {
+        const startPct = windowSpan.start/12*100;
+        const widthPct = (windowSpan.end-windowSpan.start+1)/12*100;
+        return (
+          <div style={{ position:"relative", height:20, marginBottom:2, paddingLeft:LABEL_W }}>
+            <div style={{ position:"absolute", left:`${startPct}%`, width:`${widthPct}%`,
+              top:0, bottom:0, background:"#f0fdf4", border:"1.5px solid #86efac",
+              borderBottom:"none", borderRadius:"var(--r-xs) var(--r-xs) 0 0",
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <span style={{ fontSize:10, fontWeight:700, color:"#166534", whiteSpace:"nowrap" }}>✦ Best window</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div style={{ display:"flex", marginBottom:3 }}>
+        <div style={{ width:LABEL_W, flexShrink:0 }} />
+        {months.map((m,i) => {
+          const isTop = top3.includes(m.m);
+          const isSel = selectedMonth===m.m;
+          return (
+            <div key={m.m} style={{ flex:1, textAlign:"center", position:"relative" }}>
+              <button onClick={() => onSelectMonth(m.m)}
+                style={{ width:"100%", background:"none", border:"none", cursor:"pointer",
+                  padding:"2px 0", fontFamily:"inherit", display:"flex", flexDirection:"column", alignItems:"center", gap:1 }}>
+                <span style={{ fontSize:11, fontWeight: isTop?800:600,
+                  color: isSel?"var(--brand)":isTop?"var(--txt-1)":"var(--txt-4)",
+                  transition:"color 0.12s" }}>{MONTH_NAMES[i]}</span>
+                {isTop && <span style={{ width:4, height:4, borderRadius:"50%", background:"var(--brand)", display:"block" }} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {lanes.map((lane, li) => (
+        <div key={lane.key} style={{ display:"flex", marginBottom:li<lanes.length-1?3:0, alignItems:"stretch" }}>
+          <div style={{ width:LABEL_W, flexShrink:0, display:"flex", alignItems:"center",
+            fontSize:9, fontWeight:700, color:"var(--txt-5)", textTransform:"uppercase",
+            letterSpacing:"0.07em", paddingRight:8 }}>
+            {lane.label}
+          </div>
+          {months.map((m,i) => {
+            const score = scores[i];
+            const v = verdict(score, m.typhoon);
+            const isSel = selectedMonth===m.m;
+            const isHov = hovered===m.m;
+            const isTop = top3.includes(m.m);
+
+            if (lane.key==="events") {
+              const topH = m.holidays?.length
+                ? m.holidays.reduce((a,b) => (IMPACT_RANK[b.crowdImpact]||0)>(IMPACT_RANK[a.crowdImpact]||0)?b:a)
+                : null;
+              return (
+                <div key={m.m} onClick={() => onSelectMonth(m.m)}
+                  onMouseEnter={() => setHovered(m.m)} onMouseLeave={() => setHovered(null)}
+                  style={{ flex:1, height:lane.height, cursor:"pointer", display:"flex",
+                    alignItems:"center", justifyContent:"center", gap:2, borderRadius:"var(--r-xs)",
+                    background: isSel?v.bg:isHov?"#f8f7f4":"var(--surface)",
+                    border: isSel?`1.5px solid ${v.border}`:"1.5px solid transparent",
+                    transition:"all 0.1s", margin:"0 1px" }}>
+                  {topH && <div title={topH.name} style={{ width:6, height:6, borderRadius:"50%", background:IMPACT_COLORS[topH.crowdImpact], flexShrink:0 }} />}
+                  {m.typhoon!=="none" && <span style={{ fontSize:9, lineHeight:1 }}>{m.typhoon==="high"?"🌀":"⛈"}</span>}
+                  {!topH && m.typhoon==="none" && <span style={{ fontSize:8, color:"var(--border)" }}>·</span>}
+                </div>
+              );
+            }
+
+            const fill = getLaneFill(m, score, lane.key);
+            const val = getLaneValue(m, score, lane.key);
+
+            return (
+              <div key={m.m} onClick={() => onSelectMonth(m.m)}
+                onMouseEnter={() => setHovered(m.m)} onMouseLeave={() => setHovered(null)}
+                style={{ flex:1, height:lane.height, cursor:"pointer", position:"relative",
+                  borderRadius:"var(--r-xs)", overflow:"hidden", margin:"0 1px",
+                  background: isSel?"#f3f1ed":"#f8f7f4",
+                  border: isSel?`1.5px solid ${v.border}`:`1.5px solid ${isHov?"var(--border)":"transparent"}`,
+                  transition:"border-color 0.1s" }}>
+                <div style={{ position:"absolute", bottom:0, left:0, right:0,
+                  height:`${fill.pct}%`,
+                  background: lane.key==="score"?(isSel||isHov?fill.color:fill.color+"cc"):fill.color+"44",
+                  transition:"height 0.35s ease" }} />
+                {val && (
+                  <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize: lane.key==="score"?13:9, fontWeight: lane.key==="score"?800:600,
+                    color: lane.key==="score"?(fill.pct>50?"#fff":v.text):(isHov||isSel?"var(--txt-2)":"var(--txt-5)"),
+                    letterSpacing: lane.key==="score"?"-0.3px":"0",
+                    transition:"color 0.1s", pointerEvents:"none" }}>
+                    {val}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Hover bar */}
+      {(() => {
+        const m = hovered!==null ? months[hovered-1] : null;
+        const score = m ? scores[hovered-1] : 0;
+        const v = m ? verdict(score, m.typhoon) : null;
+        return (
+          <div style={{ marginTop:8, height:36, borderRadius:"var(--r-sm)", overflow:"hidden",
+            background: m?"var(--txt-1)":"transparent", transition:"background 0.15s",
+            display:"flex", alignItems:"center", padding:m?"0 14px":"0", gap:12, flexWrap:"nowrap" }}>
+            {m && v && <>
+              <span style={{ fontWeight:800, fontSize:13, color:"#f3f1ed", whiteSpace:"nowrap" }}>{m.name}</span>
+              <span style={{ color:v.badge, fontWeight:700, fontSize:12, whiteSpace:"nowrap" }}>{v.label} · {score.toFixed(1)}</span>
+              <span style={{ color:"var(--txt-4)", fontSize:12, whiteSpace:"nowrap" }}>{fmtTemp(m.high,tempUnit)}/{fmtTemp(m.low,tempUnit)}</span>
+              <span style={{ color:m.rainDays>=16?"#f87171":"var(--txt-4)", fontSize:12, whiteSpace:"nowrap" }}>{m.rainDays}d rain</span>
+              <span style={{ color:crowdColor(m.crowds), fontSize:12, whiteSpace:"nowrap" }}>{crowdLabel(m.crowds)}</span>
+              {m.holidays?.length>0 && <span style={{ color:"#fbbf24", fontSize:12, whiteSpace:"nowrap" }}>📅 {m.holidays[0].name}</span>}
+              {m.typhoon!=="none" && <span style={{ color:m.typhoon==="high"?"#f87171":"#fb923c", fontSize:12, whiteSpace:"nowrap" }}>{m.typhoon==="high"?"🌀 Typhoon":"⛈ Storms"}</span>}
+              <span style={{ color:"#555", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>click to expand</span>
+            </>}
+          </div>
+        );
+      })()}
+
+      {/* Legend */}
+      <div style={{ display:"flex", gap:12, marginTop:10, flexWrap:"wrap" }}>
+        {[5,4,3,2,1].map(tier => (
+          <div key={tier} style={{ display:"flex", alignItems:"center", gap:4 }}>
+            <div style={{ width:8, height:8, borderRadius:2, background:TIERS[tier].badge }} />
+            <span style={{ fontSize:10, color:"var(--txt-4)" }}>{TIERS[tier].label}</span>
+          </div>
+        ))}
+        <div style={{ width:1, height:12, background:"var(--border)" }} />
+        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+          <div style={{ width:6, height:6, borderRadius:"50%", background:"#dc2626" }} />
+          <span style={{ fontSize:10, color:"var(--txt-4)" }}>Holiday</span>
+        </div>
+        <span style={{ fontSize:10 }}>🌀 <span style={{ color:"var(--txt-4)" }}>Storm</span></span>
+      </div>
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App() {
+  const shared = useMemo(() => decodeShare(), []);
+  const [selectedCity, setSelectedCity]   = useState(shared?.city || "hong-kong");
+  const [planningYear, setPlanningYear]   = useState(shared?.year || CURRENT_YEAR + 1);
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [weights, setWeights]             = useState(shared?.weights || DEFAULT_WEIGHTS);
+  const [passport, setPassport]           = useState(shared?.passport || "US");
+  const [viewMode, setViewMode]           = useState("heatmap");
+  const [tempUnit, setTempUnit]           = useState("C");
+  const detailRef = useRef(null);
+
+  const cityData = CITIES[selectedCity];
+
+  useEffect(() => { document.title = `offpeak — ${cityData.city}`; }, [cityData]);
+
+  function handleSelectMonth(m) { setSelectedMonth(prev => prev===m ? null : m); }
+  function handleCityChange(slug) { setSelectedCity(slug); setSelectedMonth(null); }
+
+  useEffect(() => {
+    if (selectedMonth!==null && detailRef.current) {
+      const y = detailRef.current.getBoundingClientRect().top + window.scrollY - 70;
+      window.scrollTo({ top:y, behavior:"smooth" });
+    }
+  }, [selectedMonth]);
+
+  return (
+    <div style={{ minHeight:"100vh" }}>
+      {/* Nav */}
+      <nav className="nav">
+        <div className="nav-inner">
+          <div className="nav-row1">
+            {/* Brand */}
+            <span className="nav-logo">offpeak</span>
+            <span className="nav-beta">beta</span>
+            <div className="nav-sep" />
+            {/* City */}
+            <div className="nav-city-group">
+              <CityDropdown selected={selectedCity} onSelect={handleCityChange} />
+              <span className="nav-country">{cityData.country}</span>
+              <VisaBadge citySlug={selectedCity} passport={passport} />
+            </div>
+            <div className="nav-sep" />
+            {/* Year — desktop */}
+            <div className="nav-years">
+              <span className="nav-years-label">Year</span>
+              <YearSelector selected={planningYear} onSelect={setPlanningYear} />
+            </div>
+            {/* Actions */}
+            <div className="nav-actions">
+              <PassportSelector selected={passport} onSelect={setPassport} />
+              <ShareButton city={selectedCity} weights={weights} year={planningYear} passport={passport} />
+            </div>
+          </div>
+          {/* Year — mobile row */}
+          <div className="nav-row2">
+            <span className="nav-years-label" style={{ flexShrink:0 }}>Year</span>
+            <YearSelector selected={planningYear} onSelect={setPlanningYear} />
+          </div>
+        </div>
+      </nav>
+
+      {/* Main */}
+      <main className="wrap">
+        <SummaryBanner
+          cityData={cityData}
+          weights={weights}
+          planningYear={planningYear}
+          onSelectMonth={handleSelectMonth}
+        />
+
+        <PersonalizePanel weights={weights} onChange={setWeights} />
+
+        {/* View toggle */}
+        <div className="view-tabs-bar">
+          <span className="view-tabs-label">All months</span>
+          <div className="view-tabs">
+            {[
+              { id:"heatmap",  label:"Heatmap"  },
+              { id:"timeline", label:"Timeline" },
+              { id:"table",    label:"List"     },
+            ].map(v => (
+              <button key={v.id}
+                className={`view-tab ${viewMode===v.id ? "active" : "inactive"}`}
+                onClick={() => setViewMode(v.id)}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <div className="temp-toggle">
+            {["C","F"].map(u => (
+              <button key={u}
+                className={`temp-btn ${tempUnit===u ? "active" : "inactive"}`}
+                onClick={() => setTempUnit(u)}>
+                °{u}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {viewMode==="heatmap" && (
+          <div className="view-panel">
+            <HeatmapView
+              weights={weights}
+              selectedCity={selectedCity}
+              onSelectCity={handleCityChange}
+              onSelectMonth={handleSelectMonth}
+              tempUnit={tempUnit}
+            />
+          </div>
+        )}
+
+        {viewMode==="timeline" && (
+          <div className="view-panel">
+            <TimelineView
+              months={cityData.months}
+              selectedMonth={selectedMonth}
+              onSelectMonth={handleSelectMonth}
+              tempUnit={tempUnit}
+              weights={weights}
+            />
+          </div>
+        )}
+
+        {viewMode==="table" && (
+          <table className="month-table">
+            <thead>
+              <tr>
+                <th>Month</th><th>Score</th><th>Temp</th>
+                <th className="col-hide-sm">Rain</th><th>Crowds</th>
+                <th className="col-hide-sm">Hotels</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {cityData.months.map(month => (
+                <MonthRow key={month.m} month={month}
+                  isSelected={selectedMonth===month.m}
+                  onSelect={handleSelectMonth}
+                  tempUnit={tempUnit}
+                  customScore={computeCustomScore(month, weights)}
+                  weights={weights} />
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {selectedMonth!==null && (
+          <div ref={detailRef}>
+            <DetailPanel
+              month={cityData.months[selectedMonth-1]}
+              cityData={cityData}
+              citySlug={selectedCity}
+              passport={passport}
+              setPassport={setPassport}
+              planningYear={planningYear}
+              onYearChange={setPlanningYear}
+              tempUnit={tempUnit}
+              onClose={() => setSelectedMonth(null)}
+            />
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="footer">
+        <span className="footer-brand">offpeak</span>
+        <span className="footer-note">Data for planning purposes only · Not affiliated with any airline or booking service</span>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
