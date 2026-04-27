@@ -1091,14 +1091,75 @@ function BarRow({ label, value, valueColor, fill, fillColor, ends, tip }) {
   );
 }
 
+// ─── ScoreSparkline ───────────────────────────────────────────────────────────
+function ScoreSparkline({ allMonths, weights, currentMonth }) {
+  const W = 124, H = 36;
+  const scores = allMonths.map(m => computeCustomScore(m, weights));
+  const lo = Math.min(...scores) - 0.3, hi = Math.max(...scores) + 0.3;
+  const range = hi - lo || 1;
+  const x = i => ((i / (scores.length - 1)) * W).toFixed(1);
+  const y = s => (H - ((s - lo) / range) * (H - 6) - 3).toFixed(1);
+  const pts = scores.map((s, i) => `${x(i)},${y(s)}`).join(" ");
+  const ci = currentMonth - 1;
+  return (
+    <svg width={W} height={H} style={{ overflow:"visible", display:"block" }}>
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth={1.5}
+        strokeLinecap="round" strokeLinejoin="round" opacity={0.2} />
+      {scores.map((s, i) => (
+        <circle key={i} cx={x(i)} cy={y(s)}
+          r={i===ci ? 4 : 2}
+          fill={i===ci ? "var(--brand)" : "currentColor"}
+          opacity={i===ci ? 1 : 0.18} />
+      ))}
+    </svg>
+  );
+}
+
+// ─── ScoreBreakdown ───────────────────────────────────────────────────────────
+function ScoreBreakdown({ month, weights }) {
+  const { wCrowd, wPrice, wTyphoon, wHoliday, preferBusy } = weights;
+  const total = wCrowd + wPrice + wTyphoon + wHoliday;
+  if (total === 0) return null;
+  const factors = [
+    { key:"crowd",   label: preferBusy ? "Vibe" : "Crowds",
+      w: wCrowd,   score: Math.min(10, Math.max(0, preferBusy ? month.crowds : (11 - month.crowds))), color:"#7c3aed" },
+    { key:"price",   label:"Price",
+      w: wPrice,   score: Math.max(0, 10 - pricePenaltyFn(month.priceIdx)), color:"#059669" },
+    { key:"storm",   label:"Storms",
+      w: wTyphoon, score: Math.max(0, 10 - typhoonPenaltyFn(month.typhoon)), color:"#0d9488" },
+    { key:"holiday", label:"Holidays",
+      w: wHoliday, score: Math.max(0, 10 - holidayPenaltyFn(month.holidays)), color:"#ea580c" },
+  ].filter(f => f.w > 0);
+  return (
+    <div style={{ display:"flex", gap:10 }}>
+      {factors.map(f => (
+        <div key={f.key} style={{ flex:1, minWidth:48 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:9, fontWeight:600, marginBottom:3 }}>
+            <span style={{ color:"var(--txt-5)", textTransform:"uppercase", letterSpacing:"0.05em" }}>{f.label}</span>
+            <span style={{ color:f.color, fontWeight:800 }}>{f.score.toFixed(1)}</span>
+          </div>
+          <div style={{ height:3, background:"var(--border-light)", borderRadius:99, overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${(f.score/10)*100}%`, background:f.color,
+              borderRadius:99, transition:"width 0.4s ease" }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── DetailPanel ─────────────────────────────────────────────────────────────
-function DetailPanel({ month, cityData, citySlug, passport, setPassport, planningYear, onYearChange, tempUnit, onClose, weights }) {
+function DetailPanel({ month, cityData, citySlug, passport, setPassport, planningYear, onYearChange, tempUnit, onClose, onPrev, onNext, weights }) {
+  const [compareM, setCompareM] = useState(null);
   const score = weights ? computeCustomScore(month, weights) : month.overall;
   const v = verdict(score, month.typhoon);
   const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
   const priceLabel = priceDelta===null ? "No data" : priceDelta===0 ? "Average" : priceDelta>0 ? `+${priceDelta}% vs avg` : `${priceDelta}% vs avg`;
   const priceCol = priceDelta===null ? "var(--txt-4)" : priceDelta>10 ? "#dc2626" : priceDelta<-5 ? "#059669" : "var(--txt-3)";
   const cCol = crowdColor(month.crowds);
+  const cmpMonth = compareM !== null ? cityData.months[compareM - 1] : null;
+  const cmpScore = cmpMonth && weights ? computeCustomScore(cmpMonth, weights) : null;
+  const cmpV     = cmpMonth && cmpScore !== null ? verdict(cmpScore, cmpMonth.typhoon) : null;
 
   const quickTake = useMemo(() => {
     const parts = [];
@@ -1122,6 +1183,16 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
       {/* Header */}
       <div className="detail-header" style={{ background:v.bg, borderBottomColor:v.border }}>
         <div className="detail-header-left">
+          {/* Prev arrow */}
+          <button onClick={onPrev} title="Previous month (←)"
+            style={{ background:"none", border:`1.5px solid ${v.badge}44`, borderRadius:"50%",
+              width:28, height:28, cursor:"pointer", color:v.text, fontSize:13, fontWeight:700,
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+              fontFamily:"inherit", padding:0, transition:"border-color 0.12s, background 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=v.badge; e.currentTarget.style.background=v.bg; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor=v.badge+"44"; e.currentTarget.style.background="none"; }}>
+            ‹
+          </button>
           <span className="detail-emoji">{weatherEmoji(month)}</span>
           <div>
             <div className="detail-month-name" style={{ color:v.text }}>{month.name} {planningYear}</div>
@@ -1130,6 +1201,21 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
               {v.warning && <span className="detail-warning" style={{ color:v.text }}>{v.warning}</span>}
             </div>
           </div>
+          {/* Next arrow */}
+          <button onClick={onNext} title="Next month (→)"
+            style={{ background:"none", border:`1.5px solid ${v.badge}44`, borderRadius:"50%",
+              width:28, height:28, cursor:"pointer", color:v.text, fontSize:13, fontWeight:700,
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+              fontFamily:"inherit", padding:0, transition:"border-color 0.12s, background 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=v.badge; e.currentTarget.style.background=v.bg; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor=v.badge+"44"; e.currentTarget.style.background="none"; }}>
+            ›
+          </button>
+        </div>
+        {/* Sparkline — all 12 months at a glance */}
+        <div style={{ flexShrink:0, padding:"0 16px", color:v.text, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+          <span style={{ fontSize:9, fontWeight:700, color:v.badge, opacity:0.65, textTransform:"uppercase", letterSpacing:"0.06em" }}>Year</span>
+          <ScoreSparkline allMonths={cityData.months} weights={weights} currentMonth={month.m} />
         </div>
         <div className="detail-score-block">
           <div className="detail-score-num" style={{ color:v.text }}>{score.toFixed(1)}</div>
@@ -1138,11 +1224,12 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
         <button className="close-btn" onClick={onClose}>✕</button>
       </div>
 
-      {/* Quick take strip — verdict at a glance */}
-      <div style={{ padding:"12px 24px", background:v.bg, borderBottom:`1px solid ${v.border}` }}>
-        <p style={{ margin:0, fontSize:13, color:v.text, lineHeight:1.75, fontStyle:"italic" }}>
+      {/* Quick take strip */}
+      <div style={{ padding:"10px 24px", background:v.bg, borderBottom:`1px solid ${v.border}` }}>
+        <p style={{ margin:"0 0 8px", fontSize:13, color:v.text, lineHeight:1.75, fontStyle:"italic" }}>
           {quickTake}
         </p>
+        {weights && <ScoreBreakdown month={month} weights={weights} />}
       </div>
 
       {/* Two-column body */}
@@ -1285,6 +1372,89 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
             );
           })}
         </div>
+      </div>
+
+      {/* Compare section */}
+      <div style={{ padding:"14px 22px", borderTop:"1px solid var(--border-light)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <span style={{ fontSize:10, fontWeight:700, color:"var(--txt-4)", textTransform:"uppercase", letterSpacing:"0.05em", flexShrink:0 }}>Compare with</span>
+          {cityData.months.filter(m => m.m !== month.m).map(m => {
+            const sc = weights ? computeCustomScore(m, weights) : m.overall;
+            const vd = verdict(sc, m.typhoon);
+            const active = compareM === m.m;
+            return (
+              <button key={m.m} onClick={() => setCompareM(active ? null : m.m)}
+                style={{ padding:"2px 8px", borderRadius:99, fontSize:10, fontWeight:700, cursor:"pointer",
+                  fontFamily:"inherit", transition:"all 0.12s",
+                  border:`1px solid ${active ? vd.badge : "var(--border)"}`,
+                  background: active ? vd.bg : "transparent",
+                  color: active ? vd.badge : "var(--txt-4)" }}>
+                {m.name}
+              </button>
+            );
+          })}
+        </div>
+
+        {cmpMonth && cmpScore !== null && cmpV && (() => {
+          const priceFmt = m => {
+            if (!m.priceIdx) return "—";
+            const d = Math.round(m.priceIdx - 100);
+            return d === 0 ? "avg" : d > 0 ? `+${d}%` : `${d}%`;
+          };
+          const rows = [
+            { label:"Score",  a: score.toFixed(1),                             b: cmpScore.toFixed(1),                          betterA: score > cmpScore,                   betterB: cmpScore > score },
+            { label:"Hi / Lo",a:`${fmtTemp(month.high,tempUnit)}/${fmtTemp(month.low,tempUnit)}`, b:`${fmtTemp(cmpMonth.high,tempUnit)}/${fmtTemp(cmpMonth.low,tempUnit)}`, betterA:null, betterB:null },
+            { label:"Rain",   a: `${month.rainDays}d`,                          b: `${cmpMonth.rainDays}d`,                       betterA: month.rainDays < cmpMonth.rainDays,  betterB: cmpMonth.rainDays < month.rainDays },
+            { label:"Crowds", a: crowdLabel(month.crowds),                      b: crowdLabel(cmpMonth.crowds),                   betterA: month.crowds < cmpMonth.crowds,      betterB: cmpMonth.crowds < month.crowds },
+            { label:"Hotels", a: priceFmt(month),                               b: priceFmt(cmpMonth),                            betterA: (month.priceIdx||100) < (cmpMonth.priceIdx||100), betterB: (cmpMonth.priceIdx||100) < (month.priceIdx||100) },
+          ];
+          return (
+            <div style={{ marginTop:12, borderRadius:"var(--r-md)", overflow:"hidden", border:"1px solid var(--border-light)" }}>
+              {/* Headers */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 72px 1fr",
+                background:"var(--border-light)", padding:"8px 12px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:11, fontWeight:800, color:v.text }}>{month.name}</span>
+                  <span style={{ fontSize:9, fontWeight:700, padding:"1px 7px", borderRadius:99,
+                    background:v.badge, color:"#fff" }}>{v.label}</span>
+                </div>
+                <div style={{ textAlign:"center", fontSize:10, fontWeight:600, color:"var(--txt-5)" }}>vs</div>
+                <div style={{ display:"flex", alignItems:"center", gap:6, justifyContent:"flex-end" }}>
+                  <span style={{ fontSize:9, fontWeight:700, padding:"1px 7px", borderRadius:99,
+                    background:cmpV.badge, color:"#fff" }}>{cmpV.label}</span>
+                  <span style={{ fontSize:11, fontWeight:800, color:cmpV.text }}>{cmpMonth.name}</span>
+                </div>
+              </div>
+              {/* Rows */}
+              {rows.map((row, i) => (
+                <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 72px 1fr",
+                  padding:"7px 12px", background: i%2===0 ? "var(--surface)" : "var(--border-light)",
+                  alignItems:"center" }}>
+                  <div style={{ fontSize:12, fontWeight: row.betterA ? 700 : 400,
+                    color: row.betterA ? "var(--txt-1)" : "var(--txt-3)",
+                    display:"flex", alignItems:"center", gap:4 }}>
+                    {row.betterA && <span style={{ fontSize:10, color:"#059669" }}>✓</span>}
+                    {row.a}
+                  </div>
+                  <div style={{ textAlign:"center", fontSize:9, fontWeight:700, color:"var(--txt-5)",
+                    textTransform:"uppercase", letterSpacing:"0.05em" }}>{row.label}</div>
+                  <div style={{ fontSize:12, fontWeight: row.betterB ? 700 : 400,
+                    color: row.betterB ? "var(--txt-1)" : "var(--txt-3)",
+                    display:"flex", alignItems:"center", gap:4, justifyContent:"flex-end" }}>
+                    {row.b}
+                    {row.betterB && <span style={{ fontSize:10, color:"#059669" }}>✓</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Keyboard hint */}
+      <div style={{ padding:"8px 22px", borderTop:"1px solid var(--border-light)",
+        display:"flex", justifyContent:"flex-end" }}>
+        <span style={{ fontSize:10, color:"var(--txt-5)" }}>Esc to close</span>
       </div>
     </div>
   );
@@ -1836,6 +2006,17 @@ function App() {
     }
   }, [selectedMonth]);
 
+  useEffect(() => {
+    function onKey(e) {
+      if (selectedMonth === null) return;
+      if (e.key === "Escape")     { handleCloseDetail(); return; }
+      if (e.key === "ArrowLeft")  { e.preventDefault(); setSelectedMonth(p => p <= 1  ? 12 : p - 1); }
+      if (e.key === "ArrowRight") { e.preventDefault(); setSelectedMonth(p => p >= 12 ? 1  : p + 1); }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selectedMonth]);
+
   return (
     <div style={{ minHeight:"100vh" }}>
       {/* Nav */}
@@ -2045,6 +2226,8 @@ function App() {
               tempUnit={tempUnit}
               weights={weights}
               onClose={handleCloseDetail}
+              onPrev={() => setSelectedMonth(p => p <= 1  ? 12 : p - 1)}
+              onNext={() => setSelectedMonth(p => p >= 12 ? 1  : p + 1)}
             />
           </div>
         )}
