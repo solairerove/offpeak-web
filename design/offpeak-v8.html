@@ -58,6 +58,20 @@ body {
 }
 .fade-up { animation: fadeUp 0.18s ease-out; }
 
+@keyframes deltaFade {
+  0%   { opacity: 0; transform: translateY(3px) scale(0.85); }
+  18%  { opacity: 1; transform: translateY(0) scale(1); }
+  65%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-4px) scale(0.9); }
+}
+.delta-tag {
+  position: absolute; bottom: 3px; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 800; letter-spacing: 0.02em;
+  pointer-events: none; line-height: 1;
+  animation: deltaFade 1.7s ease-out forwards;
+}
+
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 16px 80px; }
 
@@ -1258,14 +1272,13 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
 // ─── HeatmapView ─────────────────────────────────────────────────────────────
 const DEFAULT_HEATMAP_CITIES = ["hong-kong","tokyo","bali","bangkok","da-nang","lisbon","barcelona","kyoto","singapore","seoul"];
 
-function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempUnit }) {
+function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSelectMonth, tempUnit, scoreDeltas, deltaKey }) {
   const [visibleCities, setVisibleCities] = useState(() => {
     const set = new Set(DEFAULT_HEATMAP_CITIES);
     set.add(selectedCity);
     return [...set];
   });
   const [hovered, setHovered] = useState(null);
-  const [focusedCell, setFocusedCell] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const pickerRef = useRef(null);
@@ -1289,7 +1302,6 @@ function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempU
   function removeCity(slug) {
     if (slug===selectedCity) return;
     setVisibleCities(prev => prev.filter(s => s!==slug));
-    if (focusedCell?.slug===slug) setFocusedCell(null);
   }
   function addCity(slug) {
     setVisibleCities(prev => prev.includes(slug) ? prev : [...prev, slug]);
@@ -1378,7 +1390,10 @@ function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempU
             const d = CITIES[slug]; if (!d) return null;
             const isCurrent = slug===selectedCity;
             return (
-              <div key={slug} style={{ display:"flex", alignItems:"center", marginBottom:3 }}>
+              <div key={slug} style={{ display:"flex", alignItems:"center", marginBottom:3,
+                borderRadius:"var(--r-xs)", padding:"0 2px",
+                background: isCurrent ? "rgba(13,148,136,0.05)" : "transparent",
+                transition:"background 0.2s" }}>
                 <div style={{ width:LABEL_W, flexShrink:0, paddingRight:10, display:"flex", alignItems:"center", gap:6 }}>
                   <button onClick={() => onSelectCity(slug)}
                     style={{ background:"none", border:"none", cursor:"pointer", textAlign:"left",
@@ -1392,25 +1407,29 @@ function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempU
                       {d.country}
                     </div>
                   </button>
-                  {isCurrent && <div style={{ width:3, height:22, borderRadius:99, background:"var(--brand)", flexShrink:0 }} />}
+                  <div style={{ width: isCurrent?4:2, height:20, borderRadius:99,
+                    background: isCurrent?"var(--brand)":"transparent", flexShrink:0,
+                    transition:"all 0.2s" }} />
                 </div>
                 {d.months.map(m => {
                   const score = computeCustomScore(m, weights);
                   const v = verdict(score, m.typhoon);
                   const isHov = hovered?.slug===slug && hovered?.month===m.m;
-                  const isFocused = focusedCell?.slug===slug && focusedCell?.month===m.m;
+                  const isSelected = isCurrent && selectedMonth===m.m;
+                  const delta = scoreDeltas?.[slug]?.[m.m-1];
                   return (
                     <div key={m.m} style={{ flex:1, minWidth:42, height:CELL_H, margin:"0 1.5px",
                       borderRadius:"var(--r-xs)", position:"relative", overflow:"hidden", cursor:"pointer",
                       background: v.bg,
-                      border: isFocused ? `2px solid ${v.badge}` : isHov ? `2px solid ${v.badge}88` : "2px solid transparent",
-                      transition:"border-color 0.1s, transform 0.1s",
-                      transform: isHov ? "scaleY(1.05)" : "scaleY(1)" }}
-                      onClick={() => setFocusedCell(fc => fc?.slug===slug && fc?.month===m.m ? null : {slug,month:m.m})}
+                      border: isSelected ? `2px solid ${v.badge}` : isHov ? `2px solid ${v.badge}66` : "2px solid transparent",
+                      transition:"border-color 0.15s, transform 0.12s",
+                      transform: isHov ? "scaleY(1.06)" : "scaleY(1)" }}
+                      onClick={() => { onSelectCity(slug); onSelectMonth(m.m); }}
                       onMouseEnter={() => setHovered({slug,month:m.m})}
                       onMouseLeave={() => setHovered(null)}>
                       <div style={{ position:"absolute", inset:0,
-                        background:v.badge, opacity:scoreToOpacity(score), borderRadius:4 }} />
+                        background:v.badge, opacity:scoreToOpacity(score),
+                        borderRadius:4, transition:"opacity 0.35s ease" }} />
                       <div style={{ position:"absolute", inset:0, display:"flex",
                         alignItems:"center", justifyContent:"center",
                         fontSize:11, fontWeight:800, letterSpacing:"-0.3px", pointerEvents:"none",
@@ -1418,12 +1437,20 @@ function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempU
                         textShadow: score>=6 ? "0 1px 2px rgba(0,0,0,0.2)" : "none" }}>
                         {score.toFixed(1)}
                       </div>
+                      {delta !== undefined && Math.abs(delta) >= 0.15 && (
+                        <div key={`d-${deltaKey}-${slug}-${m.m}`} className="delta-tag"
+                          style={{ color: delta>0 ? "rgba(255,255,255,0.95)" : "#fca5a5",
+                            textShadow:"0 1px 2px rgba(0,0,0,0.4)" }}>
+                          {delta>0 ? `↑ +${delta.toFixed(1)}` : `↓ ${delta.toFixed(1)}`}
+                        </div>
+                      )}
                       {m.holidays?.length>0 && (
                         <div style={{ position:"absolute", top:3, right:4, width:4, height:4,
-                          borderRadius:"50%", background:"#fff", opacity:0.9 }} />
+                          borderRadius:"50%", background:"#fff", opacity:0.85 }} />
                       )}
                       {m.typhoon!=="none" && (
-                        <div style={{ position:"absolute", bottom:2, right:3, fontSize:8, lineHeight:1, opacity:0.85 }}>
+                        <div style={{ position:"absolute", bottom:delta!==undefined&&Math.abs(delta)>=0.15?12:2,
+                          right:3, fontSize:8, lineHeight:1, opacity:0.85, transition:"bottom 0.15s" }}>
                           {m.typhoon==="high"?"🌀":"⛈"}
                         </div>
                       )}
@@ -1457,48 +1484,8 @@ function HeatmapView({ weights, selectedCity, onSelectCity, onSelectMonth, tempU
               <span style={{ color:crowdColor(m.crowds), fontSize:12, whiteSpace:"nowrap" }}>{crowdLabel(m.crowds)}</span>
               {m.holidays?.length>0 && <span style={{ color:"#fbbf24", fontSize:12, whiteSpace:"nowrap" }}>📅 {m.holidays[0].name}</span>}
               {m.typhoon!=="none" && <span style={{ color:"#fb923c", fontSize:12, whiteSpace:"nowrap" }}>{m.typhoon==="high"?"🌀 Typhoon":"⛈ Storms"}</span>}
-              <span style={{ color:"#444", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>click to expand →</span>
+              <span style={{ color:"#555", fontSize:10, marginLeft:"auto", whiteSpace:"nowrap" }}>click to open →</span>
             </>}
-          </div>
-        );
-      })()}
-
-      {/* Focused cell expand */}
-      {focusedCell && (() => {
-        const fd = CITIES[focusedCell.slug]; if (!fd) return null;
-        const fm = fd.months[focusedCell.month-1];
-        const fscore = computeCustomScore(fm, weights);
-        const fv = verdict(fscore, fm.typhoon);
-        const pd = fm.priceIdx ? Math.round(fm.priceIdx-100) : null;
-        const pStr = pd===null?"—":pd===0?"avg":pd>0?`+${pd}%`:`${pd}%`;
-        const pCol = pd===null?"var(--txt-4)":pd>10?"#dc2626":pd<-5?"#059669":"var(--txt-3)";
-        return (
-          <div style={{ marginTop:8, background:fv.bg, border:`1.5px solid ${fv.border}`, borderRadius:"var(--r-md)",
-            padding:"14px 18px", display:"flex", alignItems:"center", gap:18, flexWrap:"wrap",
-            animation:"fadeUp 0.15s ease-out" }}>
-            <div>
-              <div style={{ fontSize:13, fontWeight:800, color:fv.text }}>{fd.city} · {fm.name}</div>
-              <div style={{ fontSize:11, color:fv.badge, fontWeight:700, marginTop:2 }}>{fv.label} {fv.emoji} {fscore.toFixed(1)}/10</div>
-            </div>
-            <div style={{ width:1, height:32, background:fv.border }} />
-            <div style={{ fontSize:12, color:"var(--txt-2)" }}>
-              <span style={{ fontWeight:700, color:"var(--txt-1)" }}>{fmtTemp(fm.high, tempUnit)}</span>
-              <span style={{ color:"var(--txt-4)" }}>/{fmtTemp(fm.low, tempUnit)}</span>
-              <span style={{ color:"var(--txt-4)", marginLeft:6 }}>{fm.rainDays}d rain</span>
-            </div>
-            <div style={{ fontSize:12, fontWeight:700, color:crowdColor(fm.crowds) }}>{crowdLabel(fm.crowds)}</div>
-            {pd!==null && <div style={{ fontSize:12, fontWeight:700, color:pCol }}>Hotels {pStr}</div>}
-            {fm.holidays?.length>0 && <div style={{ fontSize:12, color:"#92400e" }}>📅 {fm.holidays[0].name}</div>}
-            {fm.typhoon!=="none" && <div style={{ fontSize:12, color:fm.typhoon==="high"?"#dc2626":"#ea580c" }}>{fm.typhoon==="high"?"🌀 Typhoon risk":"⛈ Storm season"}</div>}
-            <button onClick={() => { onSelectCity(focusedCell.slug); onSelectMonth(focusedCell.month); setFocusedCell(null); }}
-              style={{ marginLeft:"auto", fontSize:11, fontWeight:700, padding:"5px 14px",
-                borderRadius:"var(--r-sm)", background:fv.badge, color:"#fff",
-                border:"none", cursor:"pointer", fontFamily:"inherit" }}>
-              Open detail →
-            </button>
-            <button onClick={() => setFocusedCell(null)}
-              style={{ background:"none", border:"none", cursor:"pointer", color:fv.text,
-                fontSize:14, fontFamily:"inherit", padding:"2px 4px", opacity:0.5 }}>✕</button>
           </div>
         );
       })()}
@@ -1725,14 +1712,41 @@ function App() {
   const [passport, setPassport]           = useState(shared?.passport || "US");
   const [viewMode, setViewMode]           = useState("heatmap");
   const [tempUnit, setTempUnit]           = useState("C");
-  const detailRef = useRef(null);
+  const [scoreDeltas, setScoreDeltas]     = useState(null);
+  const [deltaKey, setDeltaKey]           = useState(0);
+  const detailRef        = useRef(null);
+  const prevWeightsRef   = useRef(weights);
+  const deltaClearRef    = useRef(null);
+  const isFirstWRef      = useRef(true);
 
   const cityData = CITIES[selectedCity];
 
   useEffect(() => { document.title = `offpeak — ${cityData.city}`; }, [cityData]);
 
-  function handleSelectMonth(m) { setSelectedMonth(prev => prev===m ? null : m); }
+  // Score delta animation — fires on every weight change except mount
+  useEffect(() => {
+    if (isFirstWRef.current) { isFirstWRef.current = false; return; }
+    const prev = prevWeightsRef.current;
+    prevWeightsRef.current = weights;
+    const deltas = {};
+    Object.entries(CITIES).forEach(([slug, city]) => {
+      deltas[slug] = city.months.map(m => {
+        const n = computeCustomScore(m, weights);
+        const o = computeCustomScore(m, prev);
+        return Math.round((n - o) * 10) / 10;
+      });
+    });
+    setScoreDeltas(deltas);
+    setDeltaKey(k => k + 1);
+    if (deltaClearRef.current) clearTimeout(deltaClearRef.current);
+    deltaClearRef.current = setTimeout(() => setScoreDeltas(null), 1800);
+  }, [weights]);
+
+  // Nav dropdown: switching city resets month focus
   function handleCityChange(slug) { setSelectedCity(slug); setSelectedMonth(null); }
+  // Heatmap cell click: switch city + open month, no reset
+  function handleHeatmapPick(slug) { setSelectedCity(slug); }
+  function handleSelectMonth(m) { setSelectedMonth(prev => prev===m ? null : m); }
 
   useEffect(() => {
     if (selectedMonth!==null && detailRef.current) {
@@ -1820,9 +1834,12 @@ function App() {
             <HeatmapView
               weights={weights}
               selectedCity={selectedCity}
-              onSelectCity={handleCityChange}
+              selectedMonth={selectedMonth}
+              onSelectCity={handleHeatmapPick}
               onSelectMonth={handleSelectMonth}
               tempUnit={tempUnit}
+              scoreDeltas={scoreDeltas}
+              deltaKey={deltaKey}
             />
           </div>
         )}
