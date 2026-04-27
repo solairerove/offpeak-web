@@ -854,14 +854,14 @@ function YearSelector({ selected, onSelect }) {
 }
 
 // ─── SummaryBanner ───────────────────────────────────────────────────────────
-function SummaryBanner({ cityData, weights, planningYear, onSelectMonth }) {
+function SummaryBanner({ cityData, weights, planningYear, onSelectMonth, onMonthHover }) {
   const top3 = useMemo(() =>
     [...cityData.months].sort((a,b) => computeCustomScore(b,weights)-computeCustomScore(a,weights)).slice(0,3),
   [cityData, weights]);
   const worst3 = useMemo(() =>
     [...cityData.months].sort((a,b) => computeCustomScore(a,weights)-computeCustomScore(b,weights)).slice(0,3),
   [cityData, weights]);
-  const top3Sorted = useMemo(() => [...top3].sort((a,b) => a.m-b.m), [top3]);
+  const top3Sorted  = useMemo(() => [...top3].sort((a,b) => a.m-b.m), [top3]);
   const worst3Sorted = useMemo(() => [...worst3].sort((a,b) => a.m-b.m), [worst3]);
   const window = useMemo(() => getBestWindow(top3), [top3]);
   const isHistorical = planningYear < CURRENT_YEAR;
@@ -883,7 +883,9 @@ function SummaryBanner({ cityData, weights, planningYear, onSelectMonth }) {
             return (
               <button key={m.m} className="summary-month-btn"
                 style={{ borderColor:v.border, background:v.bg }}
-                onClick={() => onSelectMonth(m.m)}>
+                onClick={() => onSelectMonth(m.m)}
+                onMouseEnter={() => onMonthHover?.(m.m)}
+                onMouseLeave={() => onMonthHover?.(null)}>
                 <span style={{ fontSize:12, fontWeight:800, color:v.text }}>{m.name}</span>
                 <span style={{ fontSize:10, fontWeight:700, color:v.badge }}>{sc.toFixed(1)}</span>
               </button>
@@ -894,7 +896,10 @@ function SummaryBanner({ cityData, weights, planningYear, onSelectMonth }) {
       <div className="summary-skip">
         <span className="summary-label">Skip</span>
         {worst3Sorted.map(m => (
-          <button key={m.m} className="summary-skip-btn" onClick={() => onSelectMonth(m.m)}>
+          <button key={m.m} className="summary-skip-btn"
+            onClick={() => onSelectMonth(m.m)}
+            onMouseEnter={() => onMonthHover?.(m.m)}
+            onMouseLeave={() => onMonthHover?.(null)}>
             {m.name}
           </button>
         ))}
@@ -1272,7 +1277,7 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
 // ─── HeatmapView ─────────────────────────────────────────────────────────────
 const DEFAULT_HEATMAP_CITIES = ["hong-kong","tokyo","bali","bangkok","da-nang","lisbon","barcelona","kyoto","singapore","seoul"];
 
-function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSelectMonth, tempUnit, scoreDeltas, deltaKey }) {
+function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSelectMonth, tempUnit, scoreDeltas, deltaKey, hoveredSummaryMonth, bestMonths, skipMonths }) {
   const [visibleCities, setVisibleCities] = useState(() => {
     const set = new Set(DEFAULT_HEATMAP_CITIES);
     set.add(selectedCity);
@@ -1378,12 +1383,32 @@ function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSel
       {/* Grid */}
       <div style={{ overflowX:"auto" }}>
         <div style={{ minWidth: LABEL_W + 12*52 }}>
-          {/* Month header */}
+          {/* Month header — B: best/skip markers, A: hover highlight */}
           <div style={{ display:"flex", marginBottom:4, paddingLeft:LABEL_W }}>
-            {MONTH_NAMES.map((mo,i) => (
-              <div key={i} style={{ flex:1, textAlign:"center", fontSize:10, fontWeight:700,
-                color:"var(--txt-5)", letterSpacing:"0.04em", minWidth:42 }}>{mo}</div>
-            ))}
+            {MONTH_NAMES.map((mo,i) => {
+              const mn = i + 1;
+              const isBest = bestMonths?.includes(mn);
+              const isSkip = skipMonths?.includes(mn);
+              const isHovCol = hoveredSummaryMonth === mn;
+              return (
+                <div key={i} style={{ flex:1, textAlign:"center", minWidth:42,
+                  fontSize:10, fontWeight: isBest||isHovCol ? 800 : 600,
+                  letterSpacing:"0.04em",
+                  color: isHovCol ? "var(--brand)" : isBest ? "var(--brand)" : isSkip ? "#fca5a5" : "var(--txt-5)",
+                  transition:"color 0.15s" }}>
+                  {mo}
+                  {isBest && !isSkip && (
+                    <div style={{ width:4, height:4, borderRadius:"50%", background:"var(--brand)",
+                      margin:"2px auto 0", opacity: isHovCol ? 1 : 0.7 }} />
+                  )}
+                  {isSkip && (
+                    <div style={{ width:8, height:2, borderRadius:1, background:"#fca5a5",
+                      margin:"3px auto 0", opacity: isHovCol ? 1 : 0.6 }} />
+                  )}
+                  {!isBest && !isSkip && <div style={{ height:6 }} />}
+                </div>
+              );
+            })}
           </div>
           {/* City rows */}
           {orderedCities.map(slug => {
@@ -1417,13 +1442,15 @@ function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSel
                   const isHov = hovered?.slug===slug && hovered?.month===m.m;
                   const isSelected = isCurrent && selectedMonth===m.m;
                   const delta = scoreDeltas?.[slug]?.[m.m-1];
+                  const isColHov = hoveredSummaryMonth === m.m;
                   return (
                     <div key={m.m} style={{ flex:1, minWidth:42, height:CELL_H, margin:"0 1.5px",
                       borderRadius:"var(--r-xs)", position:"relative", overflow:"hidden", cursor:"pointer",
                       background: v.bg,
-                      border: isSelected ? `2px solid ${v.badge}` : isHov ? `2px solid ${v.badge}66` : "2px solid transparent",
-                      transition:"border-color 0.15s, transform 0.12s",
-                      transform: isHov ? "scaleY(1.06)" : "scaleY(1)" }}
+                      border: isSelected ? `2px solid ${v.badge}` : isColHov ? `2px solid var(--brand)` : isHov ? `2px solid ${v.badge}66` : "2px solid transparent",
+                      boxShadow: isColHov ? "0 0 0 1px rgba(13,148,136,0.15)" : "none",
+                      transition:"border-color 0.15s, transform 0.12s, box-shadow 0.15s",
+                      transform: isHov ? "scaleY(1.06)" : isColHov ? "scaleY(1.03)" : "scaleY(1)" }}
                       onClick={() => { onSelectCity(slug); onSelectMonth(m.m); }}
                       onMouseEnter={() => setHovered({slug,month:m.m})}
                       onMouseLeave={() => setHovered(null)}>
@@ -1714,12 +1741,22 @@ function App() {
   const [tempUnit, setTempUnit]           = useState("C");
   const [scoreDeltas, setScoreDeltas]     = useState(null);
   const [deltaKey, setDeltaKey]           = useState(0);
+  const [hoveredSummaryMonth, setHoveredSummaryMonth] = useState(null);
   const detailRef        = useRef(null);
   const prevWeightsRef   = useRef(weights);
   const deltaClearRef    = useRef(null);
   const isFirstWRef      = useRef(true);
 
   const cityData = CITIES[selectedCity];
+
+  const bestMonths = useMemo(() =>
+    [...cityData.months].sort((a,b) => computeCustomScore(b,weights)-computeCustomScore(a,weights))
+      .slice(0,3).map(m => m.m),
+  [cityData, weights]);
+  const skipMonths = useMemo(() =>
+    [...cityData.months].sort((a,b) => computeCustomScore(a,weights)-computeCustomScore(b,weights))
+      .slice(0,3).map(m => m.m),
+  [cityData, weights]);
 
   useEffect(() => { document.title = `offpeak — ${cityData.city}`; }, [cityData]);
 
@@ -1798,6 +1835,7 @@ function App() {
           weights={weights}
           planningYear={planningYear}
           onSelectMonth={handleSelectMonth}
+          onMonthHover={setHoveredSummaryMonth}
         />
 
         <PersonalizePanel weights={weights} onChange={setWeights} />
@@ -1840,6 +1878,9 @@ function App() {
               tempUnit={tempUnit}
               scoreDeltas={scoreDeltas}
               deltaKey={deltaKey}
+              hoveredSummaryMonth={hoveredSummaryMonth}
+              bestMonths={bestMonths}
+              skipMonths={skipMonths}
             />
           </div>
         )}
