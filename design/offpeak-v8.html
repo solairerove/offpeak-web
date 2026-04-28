@@ -413,8 +413,11 @@ body {
   flex-wrap: wrap; gap: 8px;
   border-top: 1px solid var(--border);
 }
-.footer-brand { font-size: 13px; font-weight: 800; color: var(--brand); letter-spacing: -0.3px; }
+.footer-brand { font-size: 14px; font-weight: 800; color: var(--brand); letter-spacing: -0.3px; }
+.footer-tagline { font-size: 11px; color: var(--txt-4); margin-top: 2px; }
 .footer-note { font-size: 11px; color: var(--txt-4); }
+.footer-link { font-size: 11px; color: var(--brand); text-decoration: none; font-weight: 600; }
+.footer-link:hover { text-decoration: underline; }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
@@ -2235,8 +2238,14 @@ function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <span className="footer-brand">offpeak</span>
-        <span className="footer-note">Data for planning purposes only · Not affiliated with any airline or booking service</span>
+        <div>
+          <div className="footer-brand">offpeak</div>
+          <div className="footer-tagline">Travel planning without the guesswork.</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+          <span className="footer-note">Data for planning purposes · Not affiliated with any booking service</span>
+          <a href="mailto:hello@offpeak.travel" className="footer-link">Send feedback ↗</a>
+        </div>
       </footer>
     </div>
   );
