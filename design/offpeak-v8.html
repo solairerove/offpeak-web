@@ -80,19 +80,6 @@ body {
 }
 .fade-up { animation: fadeUp 0.18s ease-out; }
 
-@keyframes deltaFade {
-  0%   { opacity: 0; transform: translateY(3px) scale(0.85); }
-  18%  { opacity: 1; transform: translateY(0) scale(1); }
-  65%  { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(-4px) scale(0.9); }
-}
-.delta-tag {
-  position: absolute; bottom: 3px; left: 0; right: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 8px; font-weight: 800; letter-spacing: 0.02em;
-  pointer-events: none; line-height: 1;
-  animation: deltaFade 1.7s ease-out forwards;
-}
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 16px 80px; }
@@ -1488,7 +1475,7 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
 // ─── HeatmapView ─────────────────────────────────────────────────────────────
 const DEFAULT_HEATMAP_CITIES = ["hong-kong","tokyo","bali","bangkok","da-nang","lisbon","barcelona","kyoto","singapore","seoul"];
 
-function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSelectMonth, tempUnit, scoreDeltas, deltaKey, hoveredSummaryMonth, bestMonths, skipMonths }) {
+function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSelectMonth, tempUnit, hoveredSummaryMonth, bestMonths, skipMonths }) {
   const [visibleCities, setVisibleCities] = useState(() => {
     const set = new Set(DEFAULT_HEATMAP_CITIES);
     set.add(selectedCity);
@@ -1532,7 +1519,7 @@ function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSel
     );
   }, [pickerQuery, visibleCities]);
 
-  const CELL_H = 46;
+  const CELL_H = 52;
   const LABEL_W = 136;
 
   function scoreToOpacity(score) { return 0.15 + (score/10) * 0.85; }
@@ -1652,7 +1639,6 @@ function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSel
                   const v = verdict(score, m.typhoon);
                   const isHov = hovered?.slug===slug && hovered?.month===m.m;
                   const isSelected = isCurrent && selectedMonth===m.m;
-                  const delta = scoreDeltas?.[slug]?.[m.m-1];
                   const isColHov = hoveredSummaryMonth === m.m;
                   return (
                     <div key={m.m} style={{ flex:1, minWidth:42, height:CELL_H, margin:"0 1.5px",
@@ -1675,20 +1661,13 @@ function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSel
                         textShadow: score>=6 ? "0 1px 2px rgba(0,0,0,0.2)" : "none" }}>
                         {score.toFixed(1)}
                       </div>
-                      {delta !== undefined && Math.abs(delta) >= 0.15 && (
-                        <div key={`d-${deltaKey}-${slug}-${m.m}`} className="delta-tag"
-                          style={{ color: delta>0 ? "rgba(255,255,255,0.95)" : "#fca5a5",
-                            textShadow:"0 1px 2px rgba(0,0,0,0.4)" }}>
-                          {delta>0 ? `↑ +${delta.toFixed(1)}` : `↓ ${delta.toFixed(1)}`}
-                        </div>
-                      )}
                       {m.holidays?.length>0 && (
                         <div style={{ position:"absolute", top:3, right:4, width:4, height:4,
                           borderRadius:"50%", background:"#fff", opacity:0.85 }} />
                       )}
                       {m.typhoon!=="none" && (
-                        <div style={{ position:"absolute", bottom:delta!==undefined&&Math.abs(delta)>=0.15?12:2,
-                          right:3, fontSize:8, lineHeight:1, opacity:0.85, transition:"bottom 0.15s" }}>
+                        <div style={{ position:"absolute", bottom:2,
+                          right:3, fontSize:8, lineHeight:1, opacity:0.85 }}>
                           {m.typhoon==="high"?"🌀":"⛈"}
                         </div>
                       )}
@@ -1966,14 +1945,9 @@ function App() {
   const [viewMode, setViewMode]           = useState("heatmap");
   const [viewVisible, setViewVisible]     = useState(true);
   const [tempUnit, setTempUnit]           = useState("C");
-  const [scoreDeltas, setScoreDeltas]     = useState(null);
-  const [deltaKey, setDeltaKey]           = useState(0);
   const [hoveredSummaryMonth, setHoveredSummaryMonth] = useState(null);
-  const detailRef        = useRef(null);
-  const viewTabsRef      = useRef(null);
-  const prevWeightsRef   = useRef(weights);
-  const deltaClearRef    = useRef(null);
-  const isFirstWRef      = useRef(true);
+  const detailRef   = useRef(null);
+  const viewTabsRef = useRef(null);
 
   const cityData = CITIES[selectedCity];
 
@@ -1988,24 +1962,6 @@ function App() {
 
   useEffect(() => { document.title = `offpeak — ${cityData.city}`; }, [cityData]);
 
-  // Score delta animation — fires on every weight change except mount
-  useEffect(() => {
-    if (isFirstWRef.current) { isFirstWRef.current = false; return; }
-    const prev = prevWeightsRef.current;
-    prevWeightsRef.current = weights;
-    const deltas = {};
-    Object.entries(CITIES).forEach(([slug, city]) => {
-      deltas[slug] = city.months.map(m => {
-        const n = computeCustomScore(m, weights);
-        const o = computeCustomScore(m, prev);
-        return Math.round((n - o) * 10) / 10;
-      });
-    });
-    setScoreDeltas(deltas);
-    setDeltaKey(k => k + 1);
-    if (deltaClearRef.current) clearTimeout(deltaClearRef.current);
-    deltaClearRef.current = setTimeout(() => setScoreDeltas(null), 1800);
-  }, [weights]);
 
   // Nav dropdown: switching city resets month focus
   function handleCityChange(slug) { setSelectedCity(slug); setSelectedMonth(null); }
@@ -2128,8 +2084,6 @@ function App() {
               onSelectCity={handleHeatmapPick}
               onSelectMonth={handleSelectMonth}
               tempUnit={tempUnit}
-              scoreDeltas={scoreDeltas}
-              deltaKey={deltaKey}
               hoveredSummaryMonth={hoveredSummaryMonth}
               bestMonths={bestMonths}
               skipMonths={skipMonths}
