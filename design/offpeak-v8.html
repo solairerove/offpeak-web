@@ -192,9 +192,9 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  padding: 16px 20px;
+  padding: 10px 16px;
   margin-bottom: 12px;
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
 .summary-best { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .summary-label {
@@ -925,14 +925,16 @@ const CURRENT_YEAR = new Date().getFullYear();
 function YearSelector({ selected, onSelect }) {
   const years = [CURRENT_YEAR-1, CURRENT_YEAR, CURRENT_YEAR+1, CURRENT_YEAR+2, CURRENT_YEAR+3];
   return (
-    <>
-      {years.map(y => (
-        <button key={y} className={`year-pill ${selected===y ? "active" : "inactive"}`}
-          onClick={() => onSelect(y)}>
-          {y}
-        </button>
-      ))}
-    </>
+    <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+      <select value={selected} onChange={e => onSelect(+e.target.value)}
+        style={{ appearance:"none", WebkitAppearance:"none", MozAppearance:"none",
+          background:"none", border:"1px solid var(--border)", borderRadius:"var(--r-sm)",
+          padding:"4px 22px 4px 10px", fontFamily:"inherit", fontSize:12, fontWeight:700,
+          color:"var(--txt-1)", cursor:"pointer", outline:"none" }}>
+        {years.map(y => <option key={y} value={y}>{y}</option>)}
+      </select>
+      <span style={{ position:"absolute", right:7, pointerEvents:"none", fontSize:9, color:"var(--txt-4)" }}>▾</span>
+    </div>
   );
 }
 
@@ -957,37 +959,31 @@ function SummaryBanner({ cityData, weights, planningYear, onSelectMonth, onMonth
           📊 Showing historical data for {planningYear}
         </div>
       )}
-      <div className="summary-best">
-        <span className="summary-label">{t.best}</span>
-        {window && <span className="summary-window">✦ {window}</span>}
-        <div style={{ display:"flex", gap:4 }}>
-          {top3Sorted.map(m => {
-            const sc = computeCustomScore(m, weights);
-            const v = verdict(sc, m.typhoon);
-            return (
-              <button key={m.m} className="summary-month-btn"
-                style={{ borderColor:v.border, background:v.bg }}
-                onClick={() => onSelectMonth(m.m)}
-                onMouseEnter={() => onMonthHover?.(m.m)}
-                onMouseLeave={() => onMonthHover?.(null)}>
-                <span style={{ fontSize:12, fontWeight:800, color:v.text }}>{m.name}</span>
-                <span style={{ fontSize:10, fontWeight:700, color:v.badge }}>{sc.toFixed(1)}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <div className="summary-skip">
-        <span className="summary-label">{t.skip}</span>
-        {worst3Sorted.map(m => (
-          <button key={m.m} className="summary-skip-btn"
-            onClick={() => onSelectMonth(m.m)}
+      <span className="summary-label">{t.best}</span>
+      {top3Sorted.map(m => {
+        const v = verdict(computeCustomScore(m, weights), m.typhoon);
+        return (
+          <button key={m.m} onClick={() => onSelectMonth(m.m)}
             onMouseEnter={() => onMonthHover?.(m.m)}
-            onMouseLeave={() => onMonthHover?.(null)}>
+            onMouseLeave={() => onMonthHover?.(null)}
+            style={{ background:"none", border:"none", padding:"0 2px", cursor:"pointer",
+              fontFamily:"inherit", fontSize:13, fontWeight:700, color:v.badge }}>
             {m.name}
           </button>
-        ))}
-      </div>
+        );
+      })}
+      {window && <span className="summary-window">✦ {window}</span>}
+      <span style={{ color:"var(--border)", margin:"0 6px" }}>·</span>
+      <span className="summary-label">{t.skip}</span>
+      {worst3Sorted.map(m => (
+        <button key={m.m} onClick={() => onSelectMonth(m.m)}
+          onMouseEnter={() => onMonthHover?.(m.m)}
+          onMouseLeave={() => onMonthHover?.(null)}
+          style={{ background:"none", border:"none", padding:"0 2px", cursor:"pointer",
+            fontFamily:"inherit", fontSize:13, fontWeight:600, color:"var(--txt-4)" }}>
+          {m.name}
+        </button>
+      ))}
     </div>
   );
 }
@@ -2136,11 +2132,6 @@ function App() {
               <LangSelector selected={lang} onSelect={setLang} />
               <ShareButton city={selectedCity} weights={weights} year={planningYear} />
             </div>
-          </div>
-          {/* Year — mobile row */}
-          <div className="nav-row2">
-            <span className="nav-years-label" style={{ flexShrink:0 }}>{t.year}</span>
-            <YearSelector selected={planningYear} onSelect={setPlanningYear} />
           </div>
         </div>
       </nav>
