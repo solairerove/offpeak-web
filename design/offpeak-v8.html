@@ -640,6 +640,32 @@ function getVisa(citySlug, passportId) {
   return VISA_DATA[citySlug]?.[passportId] ?? "required";
 }
 
+// ─── Localisation ─────────────────────────────────────────────────────────────
+const LANGS = [
+  { id:"en", flag:"🇬🇧", label:"EN" },
+  { id:"be", flag:"🇧🇾", label:"BE" },
+];
+const T = {
+  en: {
+    year:"Year", allMonths:"All months",
+    heatmap:"Heatmap", timeline:"Timeline", table:"List",
+    best:"Best", skip:"Skip",
+    share:"Share", copied:"Copied!",
+    months:["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+    monthsFull:["January","February","March","April","May","June","July","August","September","October","November","December"],
+  },
+  be: {
+    year:"Год", allMonths:"Усе месяцы",
+    heatmap:"Цяплавая карта", timeline:"Часавая шкала", table:"Спіс",
+    best:"Лепшы", skip:"Прапусціць",
+    share:"Падзяліцца", copied:"Скапіравана!",
+    months:["Сту","Лют","Сак","Кра","Май","Чэр","Ліп","Жні","Вер","Кас","Ліс","Сне"],
+    monthsFull:["Студзень","Люты","Сакавік","Красавік","Май","Чэрвень","Ліпень","Жнівень","Верасень","Кастрычнік","Лістапад","Снежань"],
+  },
+};
+const LangContext = React.createContext("en");
+function useLang() { const l = React.useContext(LangContext); return T[l] || T.en; }
+
 const FLIGHT_DATA = {
   "hong-kong": [82, 88, 92, 98, 105, 110, 112, 108, 90, 95, 100, 118],
   "da-nang":   [95, 102, 98, 105, 90, 85, 83, 80, 88, 92, 98, 110],
@@ -649,12 +675,12 @@ function getFlightIdx(citySlug, monthIdx) {
 }
 
 // ─── URL share ───────────────────────────────────────────────────────────────
-function encodeShare(city, weights, year, passport) {
+function encodeShare(city, weights, year) {
   const p = new URLSearchParams({
     c: city,
     wc: weights.wCrowd, wp: weights.wPrice, wt: weights.wTyphoon, wh: weights.wHoliday,
     pb: weights.preferBusy ? 1 : 0,
-    y: year, pp: passport,
+    y: year,
   });
   return `${location.origin}${location.pathname}?${p.toString()}`;
 }
@@ -662,10 +688,9 @@ function decodeShare() {
   const p = new URLSearchParams(location.search);
   if (!p.has("c")) return null;
   return {
-    city:     p.get("c"),
-    weights:  { wCrowd:+p.get("wc")||3, wPrice:+p.get("wp")||2, wTyphoon:+p.get("wt")||2, wHoliday:+p.get("wh")||2, preferBusy: p.get("pb")==="1" },
-    year:     +p.get("y") || new Date().getFullYear() + 1,
-    passport: p.get("pp") || "US",
+    city:    p.get("c"),
+    weights: { wCrowd:+p.get("wc")||3, wPrice:+p.get("wp")||2, wTyphoon:+p.get("wt")||2, wHoliday:+p.get("wh")||2, preferBusy: p.get("pb")==="1" },
+    year:    +p.get("y") || new Date().getFullYear() + 1,
   };
 }
 
@@ -707,18 +732,63 @@ const DEFAULT_WEIGHTS = PRESETS[0];
 
 // ─── Best window helper ───────────────────────────────────────────────────────
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-function getBestWindow(top3Months) {
+function getBestWindow(top3Months, monthNames = MONTH_NAMES) {
   const nums = [...top3Months].map(m => m.m).sort((a,b) => a-b);
   function isConsec(a,b) { return b-a===1 || (a===12&&b===1); }
   if (nums.length===3 && isConsec(nums[0],nums[1]) && isConsec(nums[1],nums[2]))
-    return `${MONTH_NAMES[nums[0]-1]}–${MONTH_NAMES[nums[2]-1]}`;
-  if (nums[0]===1 && nums[1]===11 && nums[2]===12) return "Nov–Jan";
+    return `${monthNames[nums[0]-1]}–${monthNames[nums[2]-1]}`;
+  if (nums[0]===1 && nums[1]===11 && nums[2]===12) return `${monthNames[10]}–${monthNames[0]}`;
   for (let i=0; i<nums.length-1; i++)
-    if (isConsec(nums[i],nums[i+1])) return `${MONTH_NAMES[nums[i]-1]}–${MONTH_NAMES[nums[i+1]-1]}`;
+    if (isConsec(nums[i],nums[i+1])) return `${monthNames[nums[i]-1]}–${monthNames[nums[i+1]-1]}`;
   return null;
 }
 
-// ─── PassportSelector ────────────────────────────────────────────────────────
+// ─── LangSelector ────────────────────────────────────────────────────────────
+function LangSelector({ selected, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = LANGS.find(l => l.id === selected) || LANGS[0];
+
+  useEffect(() => {
+    function onOut(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onOut);
+    return () => document.removeEventListener("mousedown", onOut);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <button onClick={() => setOpen(o => !o)} title="Language"
+        style={{ display:"flex", alignItems:"center", gap:5, background:"none",
+          border:"1px solid var(--border)", borderRadius:"var(--r-sm)", padding:"4px 9px",
+          fontFamily:"inherit", fontSize:12, fontWeight:700, color:"var(--txt-1)",
+          cursor:"pointer", whiteSpace:"nowrap", transition:"border-color 0.15s" }}>
+        <span>{current.flag}</span>
+        <span style={{ fontSize:11, color:"var(--txt-3)" }}>{current.label}</span>
+        <span style={{ fontSize:9, color:"var(--txt-4)" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:100,
+          background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"var(--r-md)",
+          boxShadow:"var(--shadow-md)", padding:4, minWidth:90 }}>
+          {LANGS.map(l => (
+            <div key={l.id} onClick={() => { onSelect(l.id); setOpen(false); }}
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px",
+                borderRadius:"var(--r-xs)", cursor:"pointer", fontSize:12, fontWeight:600,
+                background: selected===l.id ? "var(--brand-light)" : "transparent",
+                color: selected===l.id ? "var(--brand)" : "var(--txt-1)", transition:"background 0.1s" }}
+              onMouseEnter={e => { if (selected!==l.id) e.currentTarget.style.background="#f8f7f4"; }}
+              onMouseLeave={e => { if (selected!==l.id) e.currentTarget.style.background="transparent"; }}>
+              <span>{l.flag}</span><span>{l.label}</span>
+              {selected===l.id && <span style={{ marginLeft:"auto", fontSize:10, color:"var(--brand)" }}>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PassportSelector (used inside DetailPanel visa section) ─────────────────
 function PassportSelector({ selected, onSelect }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -780,10 +850,11 @@ function VisaBadge({ citySlug, passport, size="sm" }) {
 }
 
 // ─── ShareButton ─────────────────────────────────────────────────────────────
-function ShareButton({ city, weights, year, passport }) {
+function ShareButton({ city, weights, year }) {
+  const t = useLang();
   const [copied, setCopied] = useState(false);
   function share() {
-    navigator.clipboard.writeText(encodeShare(city, weights, year, passport)).then(() => {
+    navigator.clipboard.writeText(encodeShare(city, weights, year)).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -797,7 +868,7 @@ function ShareButton({ city, weights, year, passport }) {
         fontFamily:"inherit", fontSize:12, fontWeight:600,
         color: copied ? "#059669" : "var(--txt-3)", cursor:"pointer",
         transition:"all 0.18s", whiteSpace:"nowrap" }}>
-      {copied ? "✓ Copied!" : "⎙ Share"}
+      {copied ? `✓ ${t.copied}` : `⎙ ${t.share}`}
     </button>
   );
 }
@@ -867,6 +938,7 @@ function YearSelector({ selected, onSelect }) {
 
 // ─── SummaryBanner ───────────────────────────────────────────────────────────
 function SummaryBanner({ cityData, weights, planningYear, onSelectMonth, onMonthHover }) {
+  const t = useLang();
   const top3 = useMemo(() =>
     [...cityData.months].sort((a,b) => computeCustomScore(b,weights)-computeCustomScore(a,weights)).slice(0,3),
   [cityData, weights]);
@@ -875,7 +947,7 @@ function SummaryBanner({ cityData, weights, planningYear, onSelectMonth, onMonth
   [cityData, weights]);
   const top3Sorted  = useMemo(() => [...top3].sort((a,b) => a.m-b.m), [top3]);
   const worst3Sorted = useMemo(() => [...worst3].sort((a,b) => a.m-b.m), [worst3]);
-  const window = useMemo(() => getBestWindow(top3), [top3]);
+  const window = useMemo(() => getBestWindow(top3, t.months), [top3, t]);
   const isHistorical = planningYear < CURRENT_YEAR;
 
   return (
@@ -886,7 +958,7 @@ function SummaryBanner({ cityData, weights, planningYear, onSelectMonth, onMonth
         </div>
       )}
       <div className="summary-best">
-        <span className="summary-label">Best</span>
+        <span className="summary-label">{t.best}</span>
         {window && <span className="summary-window">✦ {window}</span>}
         <div style={{ display:"flex", gap:4 }}>
           {top3Sorted.map(m => {
@@ -906,7 +978,7 @@ function SummaryBanner({ cityData, weights, planningYear, onSelectMonth, onMonth
         </div>
       </div>
       <div className="summary-skip">
-        <span className="summary-label">Skip</span>
+        <span className="summary-label">{t.skip}</span>
         {worst3Sorted.map(m => (
           <button key={m.m} className="summary-skip-btn"
             onClick={() => onSelectMonth(m.m)}
@@ -1319,10 +1391,9 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
             return (
               <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
                 background:"#f8f7f5", borderRadius:"var(--r-xs)", marginBottom:14 }}>
-                <span style={{ fontSize:14 }}>🔒</span>
                 <div>
                   <div style={{ fontSize:12, fontWeight:700, color:"var(--txt-1)" }}>Flight prices</div>
-                  <div style={{ fontSize:10, color:"var(--txt-4)" }}>Premium feature — coming soon</div>
+                  <div style={{ fontSize:10, color:"var(--txt-4)" }}>Coming soon</div>
                 </div>
               </div>
             );
@@ -1338,6 +1409,30 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
             {getVisa(citySlug,passport)==="visa-on-arrival" && <div style={{ fontSize:10, color:"var(--txt-4)", marginTop:6 }}>Available at the airport. Have cash & onward ticket ready.</div>}
           </div>
         </div>
+      </div>
+
+      {/* Book */}
+      <div style={{ padding:"14px 22px", borderTop:"1px solid var(--border-light)" }}>
+        <div style={{ fontSize:10, fontWeight:700, color:"var(--txt-4)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Book this trip</div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <a href="#" style={{ flex:1, minWidth:140, display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+            padding:"9px 14px", borderRadius:"var(--r-sm)", border:"1px solid var(--border)",
+            background:"var(--surface)", textDecoration:"none",
+            fontSize:12, fontWeight:700, color:"var(--txt-1)", transition:"border-color 0.15s, background 0.15s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor="var(--brand)"; e.currentTarget.style.background="var(--brand-light)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="var(--border)"; e.currentTarget.style.background="var(--surface)"; }}>
+            ✈ Search flights
+          </a>
+          <a href="#" style={{ flex:1, minWidth:140, display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+            padding:"9px 14px", borderRadius:"var(--r-sm)", border:"1px solid var(--border)",
+            background:"var(--surface)", textDecoration:"none",
+            fontSize:12, fontWeight:700, color:"var(--txt-1)", transition:"border-color 0.15s, background 0.15s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor="var(--brand)"; e.currentTarget.style.background="var(--brand-light)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="var(--border)"; e.currentTarget.style.background="var(--surface)"; }}>
+            🏨 Browse hotels
+          </a>
+        </div>
+        <div style={{ marginTop:7, fontSize:10, color:"var(--txt-5)" }}>via Skyscanner · Booking.com · <span style={{ fontStyle:"italic" }}>affiliate links</span></div>
       </div>
 
       {/* Events */}
@@ -1476,6 +1571,7 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
 const DEFAULT_HEATMAP_CITIES = ["hong-kong","tokyo","bali","bangkok","da-nang","lisbon","barcelona","kyoto","singapore","seoul"];
 
 function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSelectMonth, tempUnit, hoveredSummaryMonth, bestMonths, skipMonths }) {
+  const t = useLang();
   const [visibleCities, setVisibleCities] = useState(() => {
     const set = new Set(DEFAULT_HEATMAP_CITIES);
     set.add(selectedCity);
@@ -1583,7 +1679,7 @@ function HeatmapView({ weights, selectedCity, selectedMonth, onSelectCity, onSel
         <div style={{ minWidth: LABEL_W + 12*52 }}>
           {/* Month header — B: best/skip markers, A: hover highlight */}
           <div style={{ display:"flex", marginBottom:4, paddingLeft:LABEL_W }}>
-            {MONTH_NAMES.map((mo,i) => {
+            {t.months.map((mo,i) => {
               const mn = i + 1;
               const isBest = bestMonths?.includes(mn);
               const isSkip = skipMonths?.includes(mn);
@@ -1941,7 +2037,9 @@ function App() {
   const [planningYear, setPlanningYear]   = useState(shared?.year || CURRENT_YEAR + 1);
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [weights, setWeights]             = useState(shared?.weights || DEFAULT_WEIGHTS);
-  const [passport, setPassport]           = useState(shared?.passport || "US");
+  const [passport, setPassport]           = useState("US");
+  const [lang, setLang]                   = useState("en");
+  const t = T[lang] || T.en;
   const [viewMode, setViewMode]           = useState("heatmap");
   const [viewVisible, setViewVisible]     = useState(true);
   const [tempUnit, setTempUnit]           = useState("C");
@@ -1999,6 +2097,7 @@ function App() {
   }, [selectedMonth]);
 
   return (
+    <LangContext.Provider value={lang}>
     <div style={{ minHeight:"100vh" }}>
       {/* Nav */}
       <nav className="nav">
@@ -2012,23 +2111,22 @@ function App() {
             <div className="nav-city-group">
               <CityDropdown selected={selectedCity} onSelect={handleCityChange} />
               <span className="nav-country">{cityData.country}</span>
-              <VisaBadge citySlug={selectedCity} passport={passport} />
             </div>
             <div className="nav-sep" />
             {/* Year — desktop */}
             <div className="nav-years">
-              <span className="nav-years-label">Year</span>
+              <span className="nav-years-label">{t.year}</span>
               <YearSelector selected={planningYear} onSelect={setPlanningYear} />
             </div>
             {/* Actions */}
             <div className="nav-actions">
-              <PassportSelector selected={passport} onSelect={setPassport} />
-              <ShareButton city={selectedCity} weights={weights} year={planningYear} passport={passport} />
+              <LangSelector selected={lang} onSelect={setLang} />
+              <ShareButton city={selectedCity} weights={weights} year={planningYear} />
             </div>
           </div>
           {/* Year — mobile row */}
           <div className="nav-row2">
-            <span className="nav-years-label" style={{ flexShrink:0 }}>Year</span>
+            <span className="nav-years-label" style={{ flexShrink:0 }}>{t.year}</span>
             <YearSelector selected={planningYear} onSelect={setPlanningYear} />
           </div>
         </div>
@@ -2048,12 +2146,12 @@ function App() {
 
         {/* View toggle */}
         <div className="view-tabs-bar" ref={viewTabsRef}>
-          <span className="view-tabs-label">All months</span>
+          <span className="view-tabs-label">{t.allMonths}</span>
           <div className="view-tabs">
             {[
-              { id:"heatmap",  label:"Heatmap"  },
-              { id:"timeline", label:"Timeline" },
-              { id:"table",    label:"List"     },
+              { id:"heatmap",  label: t.heatmap  },
+              { id:"timeline", label: t.timeline },
+              { id:"table",    label: t.table    },
             ].map(v => (
               <button key={v.id}
                 className={`view-tab ${viewMode===v.id ? "active" : "inactive"}`}
@@ -2219,11 +2317,12 @@ function App() {
           <div className="footer-tagline">Travel planning without the guesswork.</div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-          <span className="footer-note">Data for planning purposes · Not affiliated with any booking service</span>
+          <span className="footer-note">Data for planning purposes only · Booking links are affiliate links — we may earn a commission at no extra cost to you</span>
           <a href="mailto:hello@offpeak.travel" className="footer-link">Send feedback ↗</a>
         </div>
       </footer>
     </div>
+    </LangContext.Provider>
   );
 }
 
