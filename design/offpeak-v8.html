@@ -1293,8 +1293,7 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
           </button>
         </div>
         {/* Sparkline — all 12 months at a glance */}
-        <div style={{ flexShrink:0, padding:"0 16px", color:v.text, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-          <span style={{ fontSize:9, fontWeight:700, color:v.badge, opacity:0.65, textTransform:"uppercase", letterSpacing:"0.06em" }}>Year</span>
+        <div style={{ flexShrink:0, padding:"0 16px", color:v.text, display:"flex", alignItems:"center" }}>
           <ScoreSparkline allMonths={cityData.months} weights={weights} currentMonth={month.m} />
         </div>
         <div className="detail-score-block">
@@ -1447,20 +1446,8 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
 
       {/* Events */}
       <div className="detail-events">
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+        <div style={{ marginBottom:10 }}>
           <span className="col-title" style={{ margin:0 }}>Events & Holidays</span>
-          <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
-            {[CURRENT_YEAR-1, CURRENT_YEAR, CURRENT_YEAR+1, CURRENT_YEAR+2, CURRENT_YEAR+3].map(y => (
-              <button key={y} onClick={() => onYearChange(y)}
-                style={{ padding:"2px 7px", borderRadius:"var(--r-xs)", fontSize:11, fontWeight:600,
-                  border:"1px solid", cursor:"pointer", fontFamily:"inherit", transition:"all 0.12s",
-                  background: planningYear===y ? "var(--brand)" : "transparent",
-                  color:      planningYear===y ? "#fff" : "var(--txt-4)",
-                  borderColor:planningYear===y ? "var(--brand)" : "var(--border)" }}>
-                {y}
-              </button>
-            ))}
-          </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:6 }}>
           {month.holidays?.length===0 && cityData && !cityData.months.some(m => m.holidays?.length>0) ? (
@@ -2262,36 +2249,15 @@ function App() {
         </div>{/* end fade wrapper */}
 
         {selectedMonth===null && (
-          <div style={{ marginTop:10, padding:"18px 24px",
+          <div style={{ marginTop:10, padding:"14px 20px",
             background:"var(--surface)", border:"1px dashed var(--border)",
-            borderRadius:"var(--r-lg)", display:"flex", alignItems:"center", gap:16 }}>
-            <span style={{ fontSize:22, flexShrink:0, opacity:0.35 }}>↑</span>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:"var(--txt-3)" }}>
-                Click any month to see the full breakdown
-              </div>
-              <div style={{ fontSize:11, color:"var(--txt-5)", marginTop:3 }}>
-                Weather · Crowds · Prices · Events & Holidays
-              </div>
+            borderRadius:"var(--r-lg)" }}>
+            <div style={{ fontSize:13, fontWeight:600, color:"var(--txt-3)" }}>
+              Click any month to see the full breakdown
             </div>
-            {bestMonths?.length>0 && (
-              <div style={{ marginLeft:"auto", display:"flex", gap:5, flexWrap:"wrap", justifyContent:"flex-end" }}>
-                <span style={{ fontSize:10, color:"var(--txt-5)", alignSelf:"center", whiteSpace:"nowrap" }}>Best months</span>
-                {bestMonths.map(mn => {
-                  const m = cityData.months[mn-1];
-                  const sc = computeCustomScore(m, weights);
-                  const v = verdict(sc, m.typhoon);
-                  return (
-                    <button key={mn} onClick={() => handleSelectMonth(mn)}
-                      style={{ padding:"3px 10px", borderRadius:99, fontSize:11, fontWeight:700,
-                        border:`1px solid ${v.border}`, background:v.bg, color:v.text,
-                        cursor:"pointer", fontFamily:"inherit", transition:"all 0.12s" }}>
-                      {m.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <div style={{ fontSize:11, color:"var(--txt-5)", marginTop:3 }}>
+              Weather · Crowds · Prices · Events & Holidays
+            </div>
           </div>
         )}
 
