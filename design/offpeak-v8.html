@@ -1235,6 +1235,7 @@ function ScoreBreakdown({ month, weights }) {
 // ─── DetailPanel ─────────────────────────────────────────────────────────────
 function DetailPanel({ month, cityData, citySlug, passport, setPassport, planningYear, onYearChange, tempUnit, onClose, onPrev, onNext, weights }) {
   const [compareM, setCompareM] = useState(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const score = weights ? computeCustomScore(month, weights) : month.overall;
   const v = verdict(score, month.typhoon);
   const priceDelta = month.priceIdx ? Math.round(month.priceIdx - 100) : null;
@@ -1310,10 +1311,24 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
 
       {/* Quick take strip */}
       <div style={{ padding:"10px 24px", background:v.bg, borderBottom:`1px solid ${v.border}` }}>
-        <p style={{ margin:"0 0 8px", fontSize:13, color:v.text, lineHeight:1.75, fontStyle:"italic" }}>
+        <p style={{ margin:0, fontSize:13, color:v.text, lineHeight:1.75, fontStyle:"italic" }}>
           {quickTake}
         </p>
-        {weights && <ScoreBreakdown month={month} weights={weights} />}
+        {weights && (
+          <div style={{ marginTop:8 }}>
+            <button onClick={() => setShowBreakdown(s => !s)}
+              style={{ background:"none", border:"none", padding:0, cursor:"pointer",
+                fontSize:10, fontWeight:700, color:v.badge, opacity:0.7, fontFamily:"inherit",
+                letterSpacing:"0.04em" }}>
+              {showBreakdown ? "Hide score breakdown ▴" : "How is this scored? ▾"}
+            </button>
+            {showBreakdown && (
+              <div style={{ marginTop:8 }}>
+                <ScoreBreakdown month={month} weights={weights} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Two-column body */}
@@ -2105,12 +2120,10 @@ function App() {
           <div className="nav-row1">
             {/* Brand */}
             <span className="nav-logo">offpeak</span>
-            <span className="nav-beta">beta</span>
             <div className="nav-sep" />
             {/* City */}
             <div className="nav-city-group">
               <CityDropdown selected={selectedCity} onSelect={handleCityChange} />
-              <span className="nav-country">{cityData.country}</span>
             </div>
             <div className="nav-sep" />
             {/* Year — desktop */}
