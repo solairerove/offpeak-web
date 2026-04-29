@@ -1479,9 +1479,13 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
       </div>
 
       {/* Compare section */}
-      <div style={{ padding:"14px 22px", borderTop:"1px solid var(--border-light)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-          <span style={{ fontSize:10, fontWeight:700, color:"var(--txt-4)", textTransform:"uppercase", letterSpacing:"0.05em", flexShrink:0 }}>Compare with</span>
+      <div style={{ padding:"10px 22px", borderTop:"1px solid var(--border-light)" }}>
+        <button onClick={() => setCompareM(compareM !== null ? null : -1)}
+          style={{ background:"none", border:"none", padding:0, cursor:"pointer",
+            fontSize:11, fontWeight:600, color:"var(--txt-4)", fontFamily:"inherit" }}>
+          {compareM !== null ? "Hide comparison ▴" : "↕ Compare with another month"}
+        </button>
+        {compareM !== null && <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:10 }}>
           {cityData.months.filter(m => m.m !== month.m).map(m => {
             const sc = weights ? computeCustomScore(m, weights) : m.overall;
             const vd = verdict(sc, m.typhoon);
@@ -1497,9 +1501,9 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
               </button>
             );
           })}
-        </div>
+        </div>}
 
-        {cmpMonth && cmpScore !== null && cmpV && (() => {
+        {compareM !== null && cmpMonth && cmpScore !== null && cmpV && (() => {
           const priceFmt = m => {
             if (!m.priceIdx) return "—";
             const d = Math.round(m.priceIdx - 100);
@@ -2213,23 +2217,18 @@ function App() {
                 {tierGroups.flatMap((group, gi) => [
                   gi > 0 && (
                     <tr key={`div-${group.tier}`}>
-                      <td colSpan={7} style={{ padding:0, height:1, background:"var(--border-light)" }} />
+                      <td colSpan={7} style={{ padding:"8px 12px 4px", borderLeft:"none", background:"transparent" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <div style={{ flex:1, height:1, background:"var(--border-light)" }} />
+                          <span style={{ fontSize:9, fontWeight:700, color:"var(--txt-5)",
+                            textTransform:"uppercase", letterSpacing:"0.06em", whiteSpace:"nowrap" }}>
+                            {TIERS[group.tier].label}
+                          </span>
+                          <div style={{ flex:1, height:1, background:"var(--border-light)" }} />
+                        </div>
+                      </td>
                     </tr>
                   ),
-                  <tr key={`hdr-${group.tier}`}>
-                    <td colSpan={7} style={{ padding:"5px 12px 2px", background:"transparent", borderLeft:"none" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                        <div style={{ width:6, height:6, borderRadius:2, background:TIERS[group.tier].badge, flexShrink:0 }} />
-                        <span style={{ fontSize:10, fontWeight:700, color:TIERS[group.tier].badge,
-                          textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                          {TIERS[group.tier].label}
-                        </span>
-                        <span style={{ fontSize:10, color:"var(--txt-5)" }}>
-                          {TIERS[group.tier].emoji}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>,
                   ...group.items.map(x => (
                     <MonthRow key={x.m.m} month={x.m}
                       isSelected={selectedMonth===x.m.m}
@@ -2248,18 +2247,6 @@ function App() {
 
         </div>{/* end fade wrapper */}
 
-        {selectedMonth===null && (
-          <div style={{ marginTop:10, padding:"14px 20px",
-            background:"var(--surface)", border:"1px dashed var(--border)",
-            borderRadius:"var(--r-lg)" }}>
-            <div style={{ fontSize:13, fontWeight:600, color:"var(--txt-3)" }}>
-              Click any month to see the full breakdown
-            </div>
-            <div style={{ fontSize:11, color:"var(--txt-5)", marginTop:3 }}>
-              Weather · Crowds · Prices · Events & Holidays
-            </div>
-          </div>
-        )}
 
         {selectedMonth!==null && (
           <div ref={detailRef}>
