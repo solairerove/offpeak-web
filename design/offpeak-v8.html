@@ -418,8 +418,7 @@ body {
 .footer {
   max-width: 1080px; margin: 0 auto;
   padding: 20px 16px 32px;
-  display: flex; align-items: center; justify-content: space-between;
-  flex-wrap: wrap; gap: 8px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   border-top: 1px solid var(--border);
 }
 .footer-brand { font-size: var(--fs-lg); font-weight: var(--fw-black); color: var(--brand); letter-spacing: var(--ls-tight); }
@@ -2214,6 +2213,7 @@ function App() {
             .map(tier => ({ tier, items: sorted.filter(x => verdict(x.score, x.m.typhoon).tier === tier) }))
             .filter(g => g.items.length > 0);
           return (
+            <div className="view-panel" style={{ padding:"12px 8px" }}>
             <table className="month-table">
               <thead>
                 <tr>
@@ -2255,6 +2255,7 @@ function App() {
                 ].filter(Boolean))}
               </tbody>
             </table>
+            </div>
           );
         })()}
 
@@ -2316,14 +2317,12 @@ function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <div>
-          <div className="footer-brand">offpeak</div>
-          <div className="footer-tagline">Travel planning without the guesswork.</div>
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-          <span className="footer-note">Data for planning purposes only · Booking links are affiliate links — we may earn a commission at no extra cost to you</span>
-          <a href="mailto:hello@offpeak.travel" className="footer-link">Send feedback ↗</a>
-        </div>
+        <span className="footer-brand">offpeak</span>
+        <span style={{ color:"var(--border)", fontSize:12 }}>·</span>
+        <span className="footer-tagline" style={{ marginTop:0 }}>Travel planning without the guesswork.</span>
+        <span style={{ color:"var(--border)", fontSize:12 }}>·</span>
+        <span className="footer-note">Data for planning only · Contains affiliate links</span>
+        <a href="mailto:hello@offpeak.travel" className="footer-link" style={{ marginLeft:"auto" }}>Send feedback ↗</a>
       </footer>
     </div>
     </LangContext.Provider>
