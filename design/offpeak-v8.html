@@ -240,7 +240,7 @@ body {
   background: var(--txt-1); color: #fff; border-color: var(--txt-1);
 }
 .preset-btn.inactive {
-  background: var(--border-light); color: var(--txt-2); border-color: transparent;
+  background: var(--border-light); color: var(--txt-2); border-color: var(--border);
 }
 .preset-btn.inactive:hover { background: var(--border); color: var(--txt-1); }
 
@@ -1016,7 +1016,7 @@ function PersonalizePanel({ weights, onChange }) {
           <button key={p.id}
             className={`preset-btn ${activePreset===p.id ? "active" : "inactive"}`}
             onClick={() => { applyPreset(p); setOpen(activePreset!==p.id || !open ? true : !open); }}>
-            <span>{p.icon}</span>{p.label}
+            {p.label}
           </button>
         ))}
         <button className="customize-toggle" onClick={() => setOpen(o => !o)}>
@@ -1277,7 +1277,6 @@ function DetailPanel({ month, cityData, citySlug, passport, setPassport, plannin
           <div>
             <div className="detail-month-name" style={{ color:v.text }}>{month.name} {planningYear}</div>
             <div className="detail-badges">
-              <span className="detail-verdict-badge" style={{ background:v.badge }}>{v.label} {v.emoji}</span>
               {v.warning && <span className="detail-warning" style={{ color:v.text }}>{v.warning}</span>}
             </div>
           </div>
@@ -2106,12 +2105,10 @@ function App() {
           <div className="nav-row1">
             {/* Brand */}
             <span className="nav-logo">offpeak</span>
-            <div className="nav-sep" />
             {/* City */}
             <div className="nav-city-group">
               <CityDropdown selected={selectedCity} onSelect={handleCityChange} />
             </div>
-            <div className="nav-sep" />
             {/* Year — desktop */}
             <div className="nav-years">
               <span className="nav-years-label">{t.year}</span>
